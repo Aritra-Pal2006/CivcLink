@@ -10,6 +10,7 @@ dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // Required for Twilio Webhooks
 
 // Initialize Firebase Admin
 const serviceAccountPath = process.env.FIREBASE_ADMIN_SDK_PATH;
