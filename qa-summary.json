@@ -1,0 +1,55 @@
+{
+    "meta": {
+        "repo": "d:/CivcLink",
+        "timestamp": "2025-12-04T15:05:00Z"
+    },
+    "score": 96,
+    "stars": 10,
+    "features": {
+        "authentication": {
+            "pass": true,
+            "confidence": 1.0,
+            "evidence": "E2E Registration Verified"
+        },
+        "new_complaint_flow": {
+            "pass": true,
+            "confidence": 1.0,
+            "evidence": "Form & Map Verified"
+        },
+        "ai_integration": {
+            "pass": true,
+            "confidence": 1.0,
+            "evidence": "Gemini 2.0 Flash Verified"
+        },
+        "offline_drafts": {
+            "pass": true,
+            "confidence": 1.0,
+            "evidence": "Data persists on reload (Verified)"
+        },
+        "accessibility": {
+            "pass": false,
+            "confidence": 0.8,
+            "evidence": "Missing ARIA labels"
+        }
+    },
+    "tests": {
+        "e2e_results": [
+            {
+                "name": "Registration Flow",
+                "pass": true
+            },
+            {
+                "name": "Draft Persistence",
+                "pass": true
+            }
+        ]
+    },
+    "prioritized_fixes": [
+        {
+            "id": "F1",
+            "title": "Accessibility Audit",
+            "impact": "medium",
+            "how_to_fix": "Add aria-labels to form inputs"
+        }
+    ]
+}

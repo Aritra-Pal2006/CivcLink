@@ -1,0 +1,18 @@
+{
+    "app_title": "CivicLink",
+    "dashboard": "Dashboard",
+    "new_complaint": "New Complaint",
+    "my_complaints": "My Complaints",
+    "community_feed": "Community Feed",
+    "sign_out": "Sign Out",
+    "welcome": "Welcome back",
+    "stats_active": "Active Complaints",
+    "stats_resolved": "Resolved",
+    "stats_pending": "Pending Review",
+    "recent_activity": "Recent Activity",
+    "status_submitted": "Submitted",
+    "status_in_review": "In Review",
+    "status_in_progress": "In Progress",
+    "status_resolved": "Resolved",
+    "status_rejected": "Rejected"
+}

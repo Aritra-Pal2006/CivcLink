@@ -1,0 +1,18 @@
+{
+    "app_title": "सिविक लिंक",
+    "dashboard": "डैशबोर्ड",
+    "new_complaint": "नई शिकायत",
+    "my_complaints": "मेरी शिकायतें",
+    "community_feed": "सामुदायिक फ़ीड",
+    "sign_out": "साइन आउट",
+    "welcome": "वापसी पर स्वागत है",
+    "stats_active": "सक्रिय शिकायतें",
+    "stats_resolved": "हल किया गया",
+    "stats_pending": "समीक्षा लंबित",
+    "recent_activity": "हाल की गतिविधि",
+    "status_submitted": "जमा किया गया",
+    "status_in_review": "समीक्षाधीन",
+    "status_in_progress": "प्रगति पर है",
+    "status_resolved": "हल हो गया",
+    "status_rejected": "अस्वीकृत"
+}

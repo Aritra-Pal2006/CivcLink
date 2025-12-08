@@ -1,0 +1,15 @@
+{
+    "name": "civiclink-root",
+    "version": "1.0.0",
+    "description": "CivicLink Root",
+    "scripts": {
+        "dev:frontend": "npm --prefix frontend run dev",
+        "dev:server": "npm --prefix server run dev",
+        "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:server\"",
+        "start:emulators": "echo 'Emulators deprecated. Use npm run dev to start local server.'"
+    },
+    "devDependencies": {
+        "@vercel/node": "^5.5.14",
+        "concurrently": "^8.2.2"
+    }
+}

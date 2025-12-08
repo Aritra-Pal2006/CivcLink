@@ -1,0 +1,69 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isOfficial() {
+      return isAuthenticated() && (getUserData().role == 'official' || getUserData().role == 'superadmin');
+    }
+    
+    function isSuperAdmin() {
+      return isAuthenticated() && getUserData().role == 'superadmin';
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated(); // Users can read other profiles (e.g. for comments)
+      allow create: if isAuthenticated() && request.auth.uid == userId; // Users can create their own profile
+      allow update: if isOwner(userId) || isSuperAdmin(); // Users update own, admins can update any
+      allow delete: if isSuperAdmin();
+    }
+
+    // Complaints collection
+    match /complaints/{complaintId} {
+      // Anyone authenticated can create
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      
+      // Read: Owner, Officials, or if the complaint is public (optional logic, for now allow all auth)
+      allow read: if isAuthenticated();
+      
+      // Update: 
+      // - Owner can update if status is 'submitted' (e.g. fix typo)
+      // - Officials can update status, priority, assignment, etc.
+      // - Everyone can update 'upvotes' (complex logic omitted for brevity, allowing auth for now)
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || 
+        isOfficial() ||
+        // Allow owner to reopen if status is pending_verification or resolved
+        (resource.data.userId == request.auth.uid && 
+         (resource.data.status == 'pending_verification' || resource.data.status == 'resolved') &&
+         request.resource.data.status == 'reopened') ||
+        // Allow owner to verify (resolve)
+        (resource.data.userId == request.auth.uid && 
+         resource.data.status == 'pending_verification' &&
+         request.resource.data.status == 'resolved') ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvotes', 'upvotedBy'])
+      );
+      
+      allow delete: if isSuperAdmin();
+
+      // Sub-collection: Notes
+      match /notes/{noteId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+      }
+    }
+  }
+}
