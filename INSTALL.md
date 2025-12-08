@@ -37,58 +37,18 @@ Before you begin, ensure you have the following installed:
     cd ..
     ```
 
-## 3. Firebase Configuration
+## 3. Configuration
 
-1.  **Create a Project**: Go to [Firebase Console](https://console.firebase.google.com/) and create a new project (e.g., `civiclink-dev`).
-2.  **Enable Authentication**:
-    *   Go to **Build** -> **Authentication**.
-    *   Click **Get Started**.
-    *   Enable **Email/Password** and **Google** sign-in providers.
-3.  **Enable Firestore Database**:
-    *   Go to **Build** -> **Firestore Database**.
-    *   Click **Create Database**.
-    *   Start in **Test Mode** (for development).
-    *   Choose a location (e.g., `asia-south1` or `us-central1`).
-4.  **Enable Storage**:
-    *   Go to **Build** -> **Storage**.
-    *   Click **Get Started**.
-    *   Start in **Test Mode**.
-5.  **Get Project Config**:
-    *   Go to **Project Settings** (gear icon).
-    *   Scroll down to **Your apps**.
-    *   Click the **Web** icon (`</>`).
-    *   Register the app (e.g., "CivicLink Web").
-    *   Copy the `firebaseConfig` object values. You will need these for the frontend `.env`.
+**⚠️ TEAM NOTE**: This repository includes the necessary `.env` files and `service-account.json` for the team. **DO NOT share this repository publicly**, or these credentials will be compromised.
 
 ## 4. Backend Setup (Server)
-
-The backend is a local Express server that handles AI, Email, and Geocoding.
 
 1.  **Navigate to Server Directory**:
     ```bash
     cd server
     ```
 
-2.  **Configure Environment Variables**:
-    *   Copy `.env.example` to `.env`:
-        ```bash
-        cp .env.example .env
-        # OR on Windows Command Prompt:
-        copy .env.example .env
-        ```
-    *   Open `.env` and fill in the required values:
-        *   `PORT`: `5000` (default)
-        *   `GEMINI_API_KEY`: Get an API key from [Google AI Studio](https://aistudio.google.com/).
-        *   `SMTP_*`: Configure your email provider (e.g., Gmail App Password) for sending emails.
-        *   `TWILIO_*`: (Optional) For WhatsApp integration.
-
-3.  **Firebase Admin SDK Setup**:
-    *   In Firebase Console, go to **Project Settings** -> **Service Accounts**.
-    *   Click **Generate new private key**.
-    *   Save the downloaded JSON file as `service-account.json` in the **root** of the project (parent of `server/`).
-    *   In `server/.env`, ensure `FIREBASE_ADMIN_SDK_PATH` points to it (e.g., `../../service-account.json`).
-
-4.  **Start the Server**:
+2.  **Start the Server**:
     ```bash
     npm run dev
     ```
@@ -101,26 +61,7 @@ The backend is a local Express server that handles AI, Email, and Geocoding.
     cd frontend
     ```
 
-2.  **Configure Environment Variables**:
-    *   Copy `.env.example` to `.env`:
-        ```bash
-        cp .env.example .env
-        # OR on Windows Command Prompt:
-        copy .env.example .env
-        ```
-    *   Open `.env` and fill in your Firebase config from Step 3.5:
-        ```env
-        VITE_FIREBASE_API_KEY=...
-        VITE_FIREBASE_AUTH_DOMAIN=...
-        VITE_FIREBASE_PROJECT_ID=...
-        VITE_FIREBASE_STORAGE_BUCKET=...
-        VITE_FIREBASE_MESSAGING_SENDER_ID=...
-        VITE_FIREBASE_APP_ID=...
-        
-        VITE_API_BASE_URL=http://localhost:5000/api
-        ```
-
-3.  **Start the Frontend**:
+2.  **Start the Frontend**:
     ```bash
     npm run dev
     ```
