@@ -27,25 +27,31 @@ export const PublicComplaintStats: React.FC<PublicComplaintStatsProps> = ({ stat
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-700 mb-4">Issues by Category</h3>
                 <div className="h-48 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie
-                                data={categoryData}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={40}
-                                outerRadius={70}
-                                fill="#8884d8"
-                                paddingAngle={5}
-                                dataKey="count"
-                            >
-                                {categoryData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
-                            </Pie>
-                            <Tooltip />
-                        </PieChart>
-                    </ResponsiveContainer>
+                    {categoryData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={categoryData}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={40}
+                                    outerRadius={70}
+                                    fill="#8884d8"
+                                    paddingAngle={5}
+                                    dataKey="count"
+                                >
+                                    {categoryData.map((_, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    ) : (
+                        <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+                            No data available
+                        </div>
+                    )}
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
                     {categoryData.slice(0, 4).map((entry, index) => (

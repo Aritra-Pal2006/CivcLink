@@ -1,16 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { getAllComplaints, getPublicStats, type Complaint } from '../../services/complaintService';
+import { getAdminComplaints, getPublicStats, type Complaint } from '../../services/complaintService';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { PublicComplaintStats } from '../../components/public/PublicComplaintStats';
+import { HeatmapLayer } from '../../components/public/HeatmapLayer';
+import { Layers, ArrowLeft } from 'lucide-react';
 import { PublicComplaintList } from '../../components/public/PublicComplaintList';
 import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
 
 export const PublicDashboard: React.FC = () => {
     const [complaints, setComplaints] = useState<Complaint[]>([]);
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [showHeatmap, setShowHeatmap] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -18,11 +20,11 @@ export const PublicDashboard: React.FC = () => {
 
     const loadData = async () => {
         try {
-            const [complaintsData, statsData] = await Promise.all([
-                getAllComplaints(),
+            const [complaintsResponse, statsData] = await Promise.all([
+                getAdminComplaints({ limit: 100 }),
                 getPublicStats()
             ]);
-            setComplaints(complaintsData);
+            setComplaints(complaintsResponse.complaints);
             setStats(statsData);
         } catch (error) {
             console.error("Failed to load public data", error);
@@ -83,36 +85,52 @@ export const PublicDashboard: React.FC = () => {
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     />
-                    {complaints.map(c => (
-                        c.location && (
-                            <CircleMarker
-                                key={c.id}
-                                center={[c.location.lat, c.location.lng]}
-                                pathOptions={{ color: getMarkerColor(c.category), fillColor: getMarkerColor(c.category) }}
-                                radius={6}
-                                fillOpacity={0.6}
-                            >
-                                <Popup>
-                                    <div className="text-sm">
-                                        <strong className="block text-gray-900">{c.category}</strong>
-                                        <span className="text-gray-500 capitalize">{c.status.replace('_', ' ')}</span>
-                                        <p className="text-xs text-gray-400 mt-1">{c.location.address}</p>
-                                    </div>
-                                </Popup>
-                            </CircleMarker>
-                        )
-                    ))}
+                    {showHeatmap ? (
+                        <HeatmapLayer points={complaints.filter(c => c.location?.lat && c.location?.lng).map(c => [c.location.lat, c.location.lng, 1])} />
+                    ) : (
+                        complaints.map(c => (
+                            c.location?.lat && c.location?.lng && (
+                                <CircleMarker
+                                    key={c.id}
+                                    center={[c.location.lat, c.location.lng]}
+                                    pathOptions={{ color: getMarkerColor(c.category), fillColor: getMarkerColor(c.category) }}
+                                    radius={6}
+                                    fillOpacity={0.6}
+                                >
+                                    <Popup>
+                                        <div className="text-sm">
+                                            <strong className="block text-gray-900">{c.category}</strong>
+                                            <span className="text-gray-500 capitalize">{c.status.replace('_', ' ')}</span>
+                                            <p className="text-xs text-gray-400 mt-1">{c.location.address}</p>
+                                        </div>
+                                    </Popup>
+                                </CircleMarker>
+                            )
+                        ))
+                    )}
                 </MapContainer>
 
-                {/* Floating Legend or Filters could go here */}
-                <div className="absolute top-4 right-4 bg-white p-2 rounded shadow-md z-[1000] text-xs">
-                    <div className="font-semibold mb-1">Legend</div>
-                    <div className="space-y-1">
-                        <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-red-500 mr-2"></span> Roads</div>
-                        <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-blue-500 mr-2"></span> Water</div>
-                        <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-yellow-500 mr-2"></span> Electricity</div>
-                        <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-green-500 mr-2"></span> Sanitation</div>
-                    </div>
+                {/* Map Controls */}
+                <div className="absolute top-4 right-4 flex flex-col space-y-2 z-[1000]">
+                    <button
+                        onClick={() => setShowHeatmap(!showHeatmap)}
+                        className="bg-white p-2 rounded shadow-md text-gray-700 hover:bg-gray-50 flex items-center justify-center"
+                        title="Toggle Heatmap"
+                    >
+                        <Layers className="h-5 w-5" />
+                    </button>
+
+                    {!showHeatmap && (
+                        <div className="bg-white p-2 rounded shadow-md text-xs">
+                            <div className="font-semibold mb-1">Legend</div>
+                            <div className="space-y-1">
+                                <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-red-500 mr-2"></span> Roads</div>
+                                <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-blue-500 mr-2"></span> Water</div>
+                                <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-yellow-500 mr-2"></span> Electricity</div>
+                                <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-green-500 mr-2"></span> Sanitation</div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

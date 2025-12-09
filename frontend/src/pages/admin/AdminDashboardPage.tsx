@@ -12,7 +12,7 @@ import 'leaflet/dist/leaflet.css';
 const HeatmapLayer = ({ complaints }: { complaints: Complaint[] }) => {
     return (
         <>
-            {complaints.map(c => (
+            {complaints.filter(c => c.location && c.location.lat && c.location.lng).map(c => (
                 <CircleMarker
                     key={c.id}
                     center={[c.location.lat, c.location.lng]}

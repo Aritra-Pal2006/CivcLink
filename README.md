@@ -1,4 +1,4 @@
-# CivicLink: AI-Powered Grievance Redressal Platform
+                                                                                                                                                                                # CivicLink: AI-Powered Grievance Redressal Platform
 
 **Local Development Guide (No Blaze Plan Required)**
 

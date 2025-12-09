@@ -85,7 +85,7 @@ export const PublicFeedPage: React.FC = () => {
                                 <div className="mt-4 flex items-center text-sm text-primary-200 space-x-4">
                                     <span className="flex items-center">
                                         <MapPin className="flex-shrink-0 mr-1.5 h-4 w-4 text-primary-300" />
-                                        {complaint.location.address.split(',')[0]} {/* Show simplified address */}
+                                        {complaint.location?.address?.split(',')[0] || 'Unknown Location'} {/* Show simplified address */}
                                     </span>
                                     <span>
                                         {complaint.createdAt ? format(complaint.createdAt.toDate(), 'MMM d') : 'N/A'}

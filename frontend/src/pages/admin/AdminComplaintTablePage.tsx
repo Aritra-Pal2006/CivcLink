@@ -17,7 +17,7 @@ export const AdminComplaintTablePage: React.FC = () => {
             setLoading(true);
             try {
                 const data = await getAdminComplaints(filters);
-                setComplaints(data);
+                setComplaints(data.complaints);
             } catch (error) {
                 console.error("Error fetching complaints:", error);
             } finally {

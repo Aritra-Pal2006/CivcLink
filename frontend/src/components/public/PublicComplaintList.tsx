@@ -27,7 +27,7 @@ export const PublicComplaintList: React.FC<PublicComplaintListProps> = ({ compla
                                 <h4 className="text-sm font-medium text-gray-900 line-clamp-1">{complaint.title}</h4>
                                 <div className="mt-1 flex items-center text-xs text-gray-500">
                                     <MapPin className="h-3 w-3 mr-1" />
-                                    <span className="truncate max-w-[150px]">{complaint.location.address}</span>
+                                    <span className="truncate max-w-[150px]">{complaint.location?.address || 'Unknown Location'}</span>
                                 </div>
                             </div>
                             <div className="text-xs text-gray-400 flex items-center">

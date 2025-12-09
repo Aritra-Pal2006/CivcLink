@@ -253,25 +253,29 @@ export const upvoteComplaint = async (complaintId: string, userId: string) => {
 export const getAdminComplaints = async (filters: { status?: string; priority?: string; limit?: number; startAfter?: string; state?: string; district?: string }) => {
     try {
         const params = new URLSearchParams();
-        if (filters.status) params.append('status', filters.status);
-        if (filters.priority) params.append('priority', filters.priority);
+        if (filters.status && filters.status !== 'all') params.append('status', filters.status);
+        if (filters.priority && filters.priority !== 'all') params.append('priority', filters.priority);
         if (filters.limit) params.append('limit', filters.limit.toString());
+        if (filters.startAfter) params.append('startAfter', filters.startAfter);
         if (filters.state) params.append('state', filters.state);
         if (filters.district) params.append('district', filters.district);
-        // startAfter not fully implemented in backend for cursor yet, but we can pass it
 
         const response = await fetch(`${API_BASE_URL}/complaints?${params.toString()}`);
         if (!response.ok) throw new Error('Failed to fetch admin complaints');
 
-        const complaints = await response.json();
-        // Convert timestamp strings to Firestore Timestamps if needed by UI, or handle in UI.
-        // The UI likely expects Firestore Timestamps because of existing code.
-        // We might need to map them back to Timestamp objects if the UI relies on .toDate()
-        return complaints.map((c: any) => ({
+        const result = await response.json();
+
+        // Handle both array response (old) and paginated response (new)
+        const complaints = Array.isArray(result) ? result : result.complaints;
+        const lastDocId = Array.isArray(result) ? null : result.lastDocId;
+
+        const mappedComplaints = complaints.map((c: any) => ({
             ...c,
             createdAt: c.createdAt ? Timestamp.fromMillis(new Date(c.createdAt._seconds * 1000 + c.createdAt._nanoseconds / 1000000).getTime()) : null,
             updatedAt: c.updatedAt ? Timestamp.fromMillis(new Date(c.updatedAt._seconds * 1000 + c.updatedAt._nanoseconds / 1000000).getTime()) : null,
         }));
+
+        return { complaints: mappedComplaints, lastDocId };
     } catch (error) {
         console.error("Error fetching admin complaints:", error);
         throw error;

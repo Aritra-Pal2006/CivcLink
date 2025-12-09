@@ -403,18 +403,31 @@ export const getComplaints = async (req: Request, res: Response) => {
         query = query.orderBy('createdAt', 'desc');
 
         if (limit) query = query.limit(Number(limit));
-        // Cursor pagination would require passing the actual document snapshot or a specific field value.
-        // For simple implementation, we might skip cursor or use offset if collection is small.
-        // Firestore doesn't support offset efficiently. 
-        // Let's just return the list for now.
+
+        if (startAfter) {
+            const startAfterDoc = await db.collection('complaints').doc(String(startAfter)).get();
+            if (startAfterDoc.exists) {
+                query = query.startAfter(startAfterDoc);
+            }
+        }
 
         const snapshot = await query.get();
         const complaints = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        res.json(complaints);
-    } catch (error) {
+        const lastDocId = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1].id : null;
+
+        res.json({
+            complaints,
+            lastDocId
+        });
+    } catch (error: any) {
         console.error("Error fetching complaints:", error);
-        res.status(500).json({ error: "Internal Server Error" });
+        // Return specific error message if it's a Firestore index error
+        if (error.code === 9 || error.message?.includes('index')) {
+            res.status(500).json({ error: "Firestore Index Required. Check server logs for creation link.", details: error.message });
+        } else {
+            res.status(500).json({ error: "Internal Server Error", details: error.message });
+        }
     }
 };
 
