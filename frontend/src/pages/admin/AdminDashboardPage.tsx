@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, getDocs, orderBy, limit } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
-import type { Complaint } from '../../services/complaintService';
+import { getAdminComplaints, type Complaint } from '../../services/complaintService';
 import { useAuth } from '../../contexts/AuthContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
@@ -32,16 +30,19 @@ const HeatmapLayer = ({ complaints }: { complaints: Complaint[] }) => {
 };
 
 export const AdminDashboardPage: React.FC = () => {
-    const { userProfile } = useAuth();
+    const { userProfile, currentUser } = useAuth();
     const [complaints, setComplaints] = useState<Complaint[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchComplaints = async () => {
+            if (!currentUser) return;
             try {
-                const q = query(collection(db, 'complaints'), orderBy('createdAt', 'desc'), limit(100));
-                const snapshot = await getDocs(q);
-                setComplaints(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Complaint)));
+                const token = await currentUser.getIdToken();
+                // Use getAdminComplaints to ensure role-based scoping (City Admin sees only their city)
+                // We fetch a larger batch for analytics purposes
+                const data = await getAdminComplaints({ limit: 500 }, token);
+                setComplaints(data.complaints);
             } catch (error) {
                 console.error("Error fetching admin stats:", error);
             } finally {
@@ -49,7 +50,10 @@ export const AdminDashboardPage: React.FC = () => {
             }
         };
         fetchComplaints();
-    }, []);
+    }, [currentUser]);
+
+    // Let's rewrite the whole useEffect and destructuring
+    // to be clean.
 
     const categoryData = Object.entries(complaints.reduce((acc, curr) => {
         acc[curr.category] = (acc[curr.category] || 0) + 1;

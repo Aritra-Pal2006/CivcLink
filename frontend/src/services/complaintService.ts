@@ -77,12 +77,13 @@ export interface ComplaintNote {
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
-export const createComplaint = async (complaintData: Omit<Complaint, 'id' | 'createdAt' | 'updatedAt' | 'status'>) => {
+export const createComplaint = async (complaintData: Omit<Complaint, 'id' | 'createdAt' | 'updatedAt' | 'status'>, token: string) => {
     try {
         const response = await fetch(`${API_BASE_URL}/complaints`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify(complaintData),
         });
@@ -157,11 +158,14 @@ export const subscribeToComplaint = (id: string, callback: (complaint: Complaint
     });
 };
 
-export const updateComplaint = async (id: string, data: Partial<Complaint>) => {
+export const updateComplaint = async (id: string, data: Partial<Complaint>, token: string) => {
     try {
         const response = await fetch(`${API_BASE_URL}/complaints/${id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify(data)
         });
         if (!response.ok) throw new Error('Failed to update complaint');
@@ -194,13 +198,16 @@ export const getComplaintNotes = async (complaintId: string) => {
     }
 };
 
-export const uploadComplaintAttachment = async (file: File) => {
+export const uploadComplaintAttachment = async (file: File, token: string) => {
     try {
         const formData = new FormData();
         formData.append('file', file);
 
         const response = await fetch(`${API_BASE_URL}/upload`, {
             method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
             body: formData,
         });
 
@@ -250,7 +257,7 @@ export const upvoteComplaint = async (complaintId: string, userId: string) => {
         throw error;
     }
 };
-export const getAdminComplaints = async (filters: { status?: string; priority?: string; limit?: number; startAfter?: string; state?: string; district?: string }) => {
+export const getAdminComplaints = async (filters: { status?: string; priority?: string; limit?: number; startAfter?: string; state?: string; district?: string; isEscalated?: boolean; minFraudScore?: number }, token: string) => {
     try {
         const params = new URLSearchParams();
         if (filters.status && filters.status !== 'all') params.append('status', filters.status);
@@ -259,8 +266,14 @@ export const getAdminComplaints = async (filters: { status?: string; priority?: 
         if (filters.startAfter) params.append('startAfter', filters.startAfter);
         if (filters.state) params.append('state', filters.state);
         if (filters.district) params.append('district', filters.district);
+        if (filters.isEscalated) params.append('isEscalated', 'true');
+        if (filters.minFraudScore) params.append('minFraudScore', filters.minFraudScore.toString());
 
-        const response = await fetch(`${API_BASE_URL}/complaints?${params.toString()}`);
+        const response = await fetch(`${API_BASE_URL}/complaints?${params.toString()}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
         if (!response.ok) throw new Error('Failed to fetch admin complaints');
 
         const result = await response.json();
@@ -297,11 +310,14 @@ export const getComplaintTimeline = async (id: string) => {
     }
 };
 
-export const verifyComplaintResolution = async (id: string, actorId: string) => {
+export const verifyComplaintResolution = async (id: string, actorId: string, token: string) => {
     try {
         const response = await fetch(`${API_BASE_URL}/complaints/${id}/verify`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify({ actorId })
         });
         if (!response.ok) throw new Error('Failed to verify complaint');
@@ -311,11 +327,14 @@ export const verifyComplaintResolution = async (id: string, actorId: string) => 
     }
 };
 
-export const reopenComplaint = async (id: string, actorId: string, reason: string) => {
+export const reopenComplaint = async (id: string, actorId: string, reason: string, token: string) => {
     try {
         const response = await fetch(`${API_BASE_URL}/complaints/${id}/reopen`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify({ actorId, reason })
         });
         if (!response.ok) throw new Error('Failed to reopen complaint');
@@ -327,7 +346,7 @@ export const reopenComplaint = async (id: string, actorId: string, reason: strin
 
 export const getPublicStats = async () => {
     try {
-        const response = await fetch(`${API_BASE_URL}/complaints/public/stats`);
+        const response = await fetch(`${API_BASE_URL}/public/stats`);
         if (!response.ok) throw new Error('Failed to fetch public stats');
         return await response.json();
     } catch (error) {
@@ -336,11 +355,25 @@ export const getPublicStats = async () => {
     }
 };
 
-export const voteDispute = async (id: string, actorId: string) => {
+export const getPublicComplaints = async (limit: number = 50) => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/public/complaints?limit=${limit}`);
+        if (!response.ok) throw new Error('Failed to fetch public complaints');
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching public complaints:", error);
+        throw error;
+    }
+};
+
+export const voteDispute = async (id: string, actorId: string, token: string) => {
     try {
         const response = await fetch(`${API_BASE_URL}/complaints/${id}/vote-dispute`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify({ actorId })
         });
         if (!response.ok) throw new Error('Failed to vote dispute');
@@ -350,7 +383,7 @@ export const voteDispute = async (id: string, actorId: string) => {
     }
 };
 
-export const uploadCitizenProof = async (id: string, actorId: string, file: File) => {
+export const uploadCitizenProof = async (id: string, actorId: string, file: File, token: string) => {
     try {
         // Reuse upload logic or just mock URL for now if uploadComplaintAttachment handles it.
         // We need to upload file first, then send URL.
@@ -360,11 +393,14 @@ export const uploadCitizenProof = async (id: string, actorId: string, file: File
         // Circular dependency issue if I import from same file? No, just call it directly if in same module scope?
         // But it's exported. I can just call it.
 
-        const attachment = await uploadComplaintAttachment(file);
+        const attachment = await uploadComplaintAttachment(file, token);
 
         const response = await fetch(`${API_BASE_URL}/complaints/${id}/citizen-proof`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify({
                 actorId,
                 citizen_proof_url: attachment.webViewLink
@@ -379,11 +415,14 @@ export const uploadCitizenProof = async (id: string, actorId: string, file: File
     }
 };
 
-export const voteResolution = async (id: string, actorId: string, vote: 'looks_fixed' | 'not_fixed') => {
+export const voteResolution = async (id: string, actorId: string, vote: 'looks_fixed' | 'not_fixed', token: string) => {
     try {
         const response = await fetch(`${API_BASE_URL}/complaints/${id}/vote-resolution`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify({ actorId, vote })
         });
         if (!response.ok) throw new Error('Failed to vote on resolution');

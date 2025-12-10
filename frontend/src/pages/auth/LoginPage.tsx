@@ -38,17 +38,30 @@ export const LoginPage: React.FC = () => {
 
                 // Role Validation based on Login Type
                 if (loginType === 'official') {
-                    if (userData.role !== 'official' && userData.role !== 'superadmin') {
+                    if (!['official', 'superadmin', 'city_admin', 'dept_admin', 'ward_admin'].includes(userData.role)) {
                         throw new Error("Access Denied: You are not an authorized official.");
                     }
-                    navigate('/admin/analytics');
+
+                    // Redirect based on specific role
+                    switch (userData.role) {
+                        case 'ward_admin': navigate('/ward/dashboard'); break;
+                        case 'dept_admin': navigate('/dept/dashboard'); break;
+                        case 'city_admin': navigate('/city/dashboard'); break;
+                        case 'superadmin': navigate('/super/dashboard'); break;
+                        default: navigate('/admin/analytics'); // Fallback
+                    }
                 } else {
                     // Citizen Login
-                    if (userData.role === 'official' || userData.role === 'superadmin') {
+                    if (['official', 'superadmin', 'city_admin', 'dept_admin', 'ward_admin'].includes(userData.role)) {
                         // Officials can login as citizens too, but usually go to admin dashboard
-                        navigate('/admin/analytics');
+                        // For now, force them to their dashboard if they log in as official, 
+                        // but if they log in as citizen, maybe send them to citizen dashboard?
+                        // Requirement says "Admin dashboards must NEVER be accessible to citizens".
+                        // But officials might want to file complaints.
+                        // Let's stick to the requested flow:
+                        navigate('/citizen/dashboard');
                     } else {
-                        navigate('/dashboard');
+                        navigate('/citizen/dashboard');
                     }
                 }
             } else {

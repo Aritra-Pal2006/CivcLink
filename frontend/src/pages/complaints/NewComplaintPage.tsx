@@ -88,10 +88,12 @@ export const NewComplaintPage: React.FC = () => {
 
         setLoading(true);
         try {
+            const token = await currentUser.getIdToken();
             let uploadedAttachments = [];
             if (attachment) {
                 const { uploadComplaintAttachment } = await import('../../services/complaintService');
-                const result = await uploadComplaintAttachment(attachment);
+                // token is already defined
+                const result = await uploadComplaintAttachment(attachment, token);
                 uploadedAttachments.push({
                     fileId: result.fileId,
                     webViewLink: result.webViewLink,
@@ -108,7 +110,10 @@ export const NewComplaintPage: React.FC = () => {
 
             // Automatic AI Analysis
             try {
-                const token = await currentUser.getIdToken();
+                // token is already defined
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
                 const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/ai/classify`, {
                     method: 'POST',
                     headers: {
@@ -118,8 +123,10 @@ export const NewComplaintPage: React.FC = () => {
                     body: JSON.stringify({
                         title: formData.title,
                         description: formData.description
-                    })
+                    }),
+                    signal: controller.signal
                 });
+                clearTimeout(timeoutId);
                 const data = await res.json();
                 if (data.category) {
                     aiResult.category = formData.category || data.category; // User override wins if set
@@ -141,7 +148,7 @@ export const NewComplaintPage: React.FC = () => {
                 aiSummary: aiResult.aiSummary,
                 location: location,
                 attachments: uploadedAttachments
-            });
+            }, token);
 
             // Clear draft after successful submission
             localStorage.removeItem('complaintDraft');

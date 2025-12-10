@@ -8,6 +8,24 @@ interface PublicComplaintListProps {
 }
 
 export const PublicComplaintList: React.FC<PublicComplaintListProps> = ({ complaints }) => {
+    const formatComplaintDate = (date: any) => {
+        if (!date) return '';
+        try {
+            // Handle Firestore Timestamp (client SDK)
+            if (typeof date.toDate === 'function') {
+                return format(date.toDate(), 'MMM d');
+            }
+            // Handle Serialized Firestore Timestamp (from REST API)
+            if (date._seconds) {
+                return format(new Date(date._seconds * 1000), 'MMM d');
+            }
+            // Handle ISO String or other formats
+            return format(new Date(date), 'MMM d');
+        } catch (e) {
+            return '';
+        }
+    };
+
     return (
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
             <div className="p-4 border-b border-gray-100">
@@ -32,7 +50,7 @@ export const PublicComplaintList: React.FC<PublicComplaintListProps> = ({ compla
                             </div>
                             <div className="text-xs text-gray-400 flex items-center">
                                 <Clock className="h-3 w-3 mr-1" />
-                                {complaint.createdAt ? format(complaint.createdAt.toDate(), 'MMM d') : ''}
+                                {formatComplaintDate(complaint.createdAt)}
                             </div>
                         </div>
                     </li>

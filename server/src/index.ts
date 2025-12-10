@@ -73,12 +73,19 @@ app.use('/api/ai', aiLimiter, aiRoutes);
 app.use('/api/geocode', geocodeRoutes);
 app.use('/api/email', emailRoutes);
 app.use('/api/complaints', complaintRoutes);
+
+import publicRoutes from './routes/public';
+app.use('/api/public', publicRoutes);
+
 import uploadRoutes from './routes/upload';
 console.log("Registering /api/upload route...");
 app.use('/api/upload', uploadLimiter, uploadRoutes);
 
 import whatsappRoutes from './routes/whatsapp';
 app.use('/api/webhooks/whatsapp', whatsappLimiter, whatsappRoutes);
+
+import adminRoutes from './routes/admin';
+app.use('/api/admin', adminRoutes);
 
 // Health Check
 app.get('/', (req, res) => {

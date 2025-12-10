@@ -10,13 +10,15 @@ import {
     voteDispute,
     uploadCitizenProof,
     voteResolution,
-    getPublicStats
+    getPublicStats,
+    getPublicComplaints
 } from '../controllers/complaintController';
 
 const router = Router();
+import { verifyToken } from '../middleware/auth';
 
-// Public Stats (Must be before /:id routes if any generic ones existed, though here it's fine)
-router.get('/public/stats', getPublicStats);
+// PROTECTED ROUTES
+router.use(verifyToken);
 
 // Create a new complaint
 router.post('/', createComplaint);

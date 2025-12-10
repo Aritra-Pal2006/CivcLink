@@ -77,6 +77,29 @@ export const CitizenDashboard: React.FC = () => {
                 </div>
             </div>
 
+            {/* Action Required Section */}
+            {complaints.some(c => c.status === 'pending_verification') && (
+                <div className="mb-8 bg-purple-900/30 border border-purple-500/50 rounded-lg p-6 backdrop-blur-md shadow-lg animate-pulse-slow">
+                    <div className="flex items-start">
+                        <AlertCircle className="h-6 w-6 text-purple-300 mt-1" />
+                        <div className="ml-4 flex-1">
+                            <h3 className="text-lg font-medium text-white">Action Required: Verify Resolutions</h3>
+                            <p className="mt-1 text-sm text-purple-200">
+                                Officials have marked some of your complaints as resolved. Please review the proof and verify or reopen them.
+                            </p>
+                            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                {complaints.filter(c => c.status === 'pending_verification').map(c => (
+                                    <Link key={c.id} to={`/complaints/${c.id}`} className="block bg-white/10 hover:bg-white/20 rounded-md p-4 transition-colors border border-white/10">
+                                        <div className="font-medium text-white truncate">{c.title}</div>
+                                        <div className="text-xs text-purple-200 mt-1">Click to review proof</div>
+                                    </Link>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Stats Overview */}
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-3 mb-8">
                 <div className="bg-white/10 backdrop-blur-md overflow-hidden shadow-lg rounded-lg border border-white/20 hover:bg-white/20 transition-colors">

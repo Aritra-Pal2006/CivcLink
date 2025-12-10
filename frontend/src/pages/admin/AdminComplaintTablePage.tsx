@@ -7,16 +7,21 @@ import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 
+import { useAuth } from '../../contexts/AuthContext';
+
 export const AdminComplaintTablePage: React.FC = () => {
+    const { currentUser } = useAuth();
     const [complaints, setComplaints] = useState<Complaint[]>([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState<{ status: string; priority: string; state?: string; district?: string }>({ status: '', priority: '', state: '', district: '' });
 
     useEffect(() => {
         const fetchComplaints = async () => {
+            if (!currentUser) return;
             setLoading(true);
             try {
-                const data = await getAdminComplaints(filters);
+                const token = await currentUser.getIdToken();
+                const data = await getAdminComplaints(filters, token);
                 setComplaints(data.complaints);
             } catch (error) {
                 console.error("Error fetching complaints:", error);
@@ -25,7 +30,7 @@ export const AdminComplaintTablePage: React.FC = () => {
             }
         };
         fetchComplaints();
-    }, [filters]);
+    }, [filters, currentUser]);
 
     const [showResolveModal, setShowResolveModal] = useState(false);
     const [resolveProofFile, setResolveProofFile] = useState<File | null>(null);
@@ -34,6 +39,7 @@ export const AdminComplaintTablePage: React.FC = () => {
     const [selectedComplaintId, setSelectedComplaintId] = useState<string | null>(null);
 
     const handleStatusChange = async (id: string, newStatus: string) => {
+        if (!currentUser) return;
         if (newStatus === 'resolved') {
             setSelectedComplaintId(id);
             setShowResolveModal(true);
@@ -41,7 +47,8 @@ export const AdminComplaintTablePage: React.FC = () => {
         }
 
         try {
-            await updateComplaint(id, { status: newStatus as any });
+            const token = await currentUser.getIdToken();
+            await updateComplaint(id, { status: newStatus as any }, token);
             setComplaints(complaints.map(c => c.id === id ? { ...c, status: newStatus as any } : c));
         } catch (error) {
             console.error("Error updating status:", error);
@@ -51,12 +58,13 @@ export const AdminComplaintTablePage: React.FC = () => {
 
     const handleResolveSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedComplaintId || !resolveProofFile) return;
+        if (!selectedComplaintId || !resolveProofFile || !currentUser) return;
 
         setResolving(true);
         try {
+            const token = await currentUser.getIdToken();
             const { uploadComplaintAttachment } = await import('../../services/complaintService');
-            const result = await uploadComplaintAttachment(resolveProofFile);
+            const result = await uploadComplaintAttachment(resolveProofFile, token);
 
             const { Timestamp } = await import('firebase/firestore');
 
@@ -201,6 +209,8 @@ export const AdminComplaintTablePage: React.FC = () => {
                                     <input
                                         type="file"
                                         required
+                                        accept="image/*"
+                                        capture="environment"
                                         onChange={(e) => setResolveProofFile(e.target.files?.[0] || null)}
                                         className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
                                     />

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getAdminComplaints, getPublicStats, type Complaint } from '../../services/complaintService';
+import { getPublicComplaints, getPublicStats, type Complaint } from '../../services/complaintService';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { PublicComplaintStats } from '../../components/public/PublicComplaintStats';
@@ -21,7 +21,7 @@ export const PublicDashboard: React.FC = () => {
     const loadData = async () => {
         try {
             const [complaintsResponse, statsData] = await Promise.all([
-                getAdminComplaints({ limit: 100 }),
+                getPublicComplaints(100),
                 getPublicStats()
             ]);
             setComplaints(complaintsResponse.complaints);

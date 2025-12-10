@@ -3,7 +3,7 @@ import { type User, onAuthStateChanged, signOut as firebaseSignOut } from "fireb
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
 
-export type UserRole = "citizen" | "official" | "superadmin";
+export type UserRole = "citizen" | "official" | "superadmin" | "city_admin" | "dept_admin" | "ward_admin";
 
 export interface UserProfile {
     uid: string;
@@ -14,6 +14,8 @@ export interface UserProfile {
     area?: string;
     preferredLanguage?: string;
     trustScore?: number;
+    department?: string | null;
+    adminArea?: { state?: string; district?: string; city?: string; wardCode?: string } | null;
 }
 
 interface AuthContextType {

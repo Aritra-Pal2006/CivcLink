@@ -6,7 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { format } from 'date-fns';
 
 export const AdminDashboard: React.FC = () => {
-    const { userProfile } = useAuth();
+    const { userProfile, currentUser } = useAuth();
     const [complaints, setComplaints] = useState<Complaint[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState('all');
@@ -18,32 +18,18 @@ export const AdminDashboard: React.FC = () => {
 
     useEffect(() => {
         loadComplaints(false);
-    }, [filterStatus, filterCategory]);
+    }, [filterStatus, filterCategory, currentUser]);
 
     const loadComplaints = async (isLoadMore = false) => {
+        if (!currentUser) return;
         try {
             setLoading(true);
+            const token = await currentUser.getIdToken();
             const data = await getAdminComplaints({
                 status: filterStatus,
-                // category: filterCategory, // API doesn't support category filter yet? Let's check service.
-                // Service supports: status, priority, limit, startAfter, state, district.
-                // It does NOT support category in backend query yet.
-                // We should filter category client-side if backend doesn't support it, OR update backend.
-                // For now, let's keep client-side category filtering but server-side pagination.
-                // This is tricky because if we filter client-side, we might get 20 results but 0 match category.
-                // Ideally we update backend to support category.
-                // Let's assume for now we just fetch and filter client side for category, 
-                // BUT this breaks pagination if we filter out everything.
-                // Let's check backend controller again.
-                // Backend `getComplaints` supports: status, priority, state, district.
-                // It does NOT support category.
-                // I should probably add category support to backend too for full scalability.
-                // For this step, I will implement pagination and note the category limitation or fix it.
-                // Let's fix backend category support in next step if needed.
-                // For now, let's pass params.
                 limit: LIMIT,
                 startAfter: isLoadMore && lastDocId ? lastDocId : undefined
-            });
+            }, token);
 
             if (isLoadMore) {
                 setComplaints(prev => [...prev, ...data.complaints]);
@@ -68,6 +54,7 @@ export const AdminDashboard: React.FC = () => {
     const [selectedComplaintId, setSelectedComplaintId] = useState<string | null>(null);
 
     const handleStatusUpdate = async (id: string, newStatus: any) => {
+        if (!currentUser) return;
         if (newStatus === 'resolved') {
             setSelectedComplaintId(id);
             setShowResolveModal(true);
@@ -75,7 +62,8 @@ export const AdminDashboard: React.FC = () => {
         }
 
         try {
-            await updateComplaint(id, { status: newStatus });
+            const token = await currentUser.getIdToken();
+            await updateComplaint(id, { status: newStatus }, token);
             // Optimistic update
             setComplaints(complaints.map(c => c.id === id ? { ...c, status: newStatus } : c));
         } catch (error) {
@@ -86,12 +74,13 @@ export const AdminDashboard: React.FC = () => {
 
     const handleResolveSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedComplaintId || !resolveProofFile) return;
+        if (!selectedComplaintId || !resolveProofFile || !currentUser) return;
 
         setResolving(true);
         try {
+            const token = await currentUser.getIdToken();
             const { uploadComplaintAttachment } = await import('../../services/complaintService');
-            const result = await uploadComplaintAttachment(resolveProofFile);
+            const result = await uploadComplaintAttachment(resolveProofFile, token);
 
             const { Timestamp } = await import('firebase/firestore');
 
@@ -110,7 +99,7 @@ export const AdminDashboard: React.FC = () => {
                 status: 'pending_verification',
                 resolutionProof: proofData,
                 verificationDeadline: Timestamp.fromDate(deadline)
-            });
+            }, token);
 
             // Update local state
             setComplaints(complaints.map(c => c.id === selectedComplaintId ? {

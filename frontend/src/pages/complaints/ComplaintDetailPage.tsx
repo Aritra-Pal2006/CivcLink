@@ -31,7 +31,7 @@ const defaultIcon = new Icon({
 
 export const ComplaintDetailPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
-    const { userProfile } = useAuth();
+    const { userProfile, currentUser } = useAuth();
     const [complaint, setComplaint] = useState<Complaint | null>(null);
     const [notes, setNotes] = useState<ComplaintNote[]>([]);
     const [newNote, setNewNote] = useState('');
@@ -77,7 +77,7 @@ export const ComplaintDetailPage: React.FC = () => {
     const [resolving, setResolving] = useState(false);
 
     const handleStatusChange = async (newStatus: string) => {
-        if (!complaint || !id) return;
+        if (!complaint || !id || !userProfile || !currentUser) return;
 
         if (newStatus === 'resolved') {
             setShowResolveModal(true);
@@ -85,7 +85,8 @@ export const ComplaintDetailPage: React.FC = () => {
         }
 
         try {
-            await updateComplaint(id, { status: newStatus as any });
+            const token = await currentUser.getIdToken();
+            await updateComplaint(id, { status: newStatus as any }, token);
             setComplaint({ ...complaint, status: newStatus as any });
         } catch (error) {
             alert("Failed to update status");
@@ -94,12 +95,13 @@ export const ComplaintDetailPage: React.FC = () => {
 
     const handleResolveSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!complaint || !id || !resolveProofFile) return;
+        if (!complaint || !id || !resolveProofFile || !currentUser) return;
 
         setResolving(true);
         try {
+            const token = await currentUser.getIdToken();
             const { uploadComplaintAttachment } = await import('../../services/complaintService');
-            const result = await uploadComplaintAttachment(resolveProofFile);
+            const result = await uploadComplaintAttachment(resolveProofFile, token);
 
             const proofData = {
                 ...result,
@@ -116,7 +118,7 @@ export const ComplaintDetailPage: React.FC = () => {
                 status: 'pending_verification',
                 resolutionProof: proofData,
                 verificationDeadline: Timestamp.fromDate(deadline)
-            });
+            }, token);
 
             setComplaint({
                 ...complaint,
@@ -134,11 +136,12 @@ export const ComplaintDetailPage: React.FC = () => {
     };
 
     const handleCitizenAction = async (action: 'verify' | 'reopen') => {
-        if (!complaint || !id) return;
+        if (!complaint || !id || !currentUser) return;
 
         try {
+            const token = await currentUser.getIdToken();
             if (action === 'verify') {
-                await updateComplaint(id, { status: 'resolved' });
+                await updateComplaint(id, { status: 'resolved' }, token);
                 setComplaint({ ...complaint, status: 'resolved' });
             } else {
                 if (!userProfile) {
@@ -148,11 +151,7 @@ export const ComplaintDetailPage: React.FC = () => {
                 const reason = prompt("Please provide a reason for reopening this complaint:");
                 if (!reason) return; // Cancelled
 
-                await reopenComplaint(id, userProfile.uid, reason); // Use the service function
-                // await updateComplaint(id, {
-                //     status: 'reopened',
-                //     timesReopened: (complaint.timesReopened || 0) + 1
-                // });
+                await reopenComplaint(id, userProfile.uid, reason, token);
                 setComplaint({
                     ...complaint,
                     status: 'reopened',
@@ -165,9 +164,10 @@ export const ComplaintDetailPage: React.FC = () => {
     };
 
     const handleAssignmentChange = async (assignee: string) => {
-        if (!complaint || !id) return;
+        if (!complaint || !id || !currentUser) return;
         try {
-            await updateComplaint(id, { assignedTo: assignee });
+            const token = await currentUser.getIdToken();
+            await updateComplaint(id, { assignedTo: assignee }, token);
             setComplaint({ ...complaint, assignedTo: assignee });
         } catch (error) {
             alert("Failed to assign");
@@ -203,9 +203,10 @@ export const ComplaintDetailPage: React.FC = () => {
     };
 
     const handleVoteDispute = async () => {
-        if (!id || !userProfile) return;
+        if (!id || !userProfile || !currentUser) return;
         try {
-            await voteDispute(id, userProfile.uid);
+            const token = await currentUser.getIdToken();
+            await voteDispute(id, userProfile.uid, token);
             alert("Dispute vote recorded. Thank you for your vigilance.");
         } catch (error) {
             alert("Failed to record vote");
@@ -213,10 +214,11 @@ export const ComplaintDetailPage: React.FC = () => {
     };
 
     const handleUploadCitizenProof = async () => {
-        if (!id || !userProfile || !citizenProofFile) return;
+        if (!id || !userProfile || !citizenProofFile || !currentUser) return;
         setUploadingProof(true);
         try {
-            await uploadCitizenProof(id, userProfile.uid, citizenProofFile);
+            const token = await currentUser.getIdToken();
+            await uploadCitizenProof(id, userProfile.uid, citizenProofFile, token);
             setCitizenProofFile(null);
             alert("Proof uploaded successfully");
         } catch (error) {
@@ -227,9 +229,10 @@ export const ComplaintDetailPage: React.FC = () => {
     };
 
     const handleVoteResolution = async (vote: 'looks_fixed' | 'not_fixed') => {
-        if (!id || !userProfile) return;
+        if (!id || !userProfile || !currentUser) return;
         try {
-            await voteResolution(id, userProfile.uid, vote);
+            const token = await currentUser.getIdToken();
+            await voteResolution(id, userProfile.uid, vote, token);
             alert("Vote recorded");
         } catch (error) {
             alert("Failed to record vote");

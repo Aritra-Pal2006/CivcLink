@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import * as admin from 'firebase-admin';
+import { AuthRequest } from '../middleware/auth';
 import { lookupAdminArea } from '../utils/geoTagger';
 import { getImageHash } from '../utils/imageUtils';
 import { aiManager } from '../services/ai/aiManager';
@@ -11,7 +12,7 @@ const logActivity = async (
     complaintId: string,
     type: 'created' | 'ai_analyzed' | 'admin_updated' | 'admin_resolved' | 'citizen_verified' | 'citizen_reopened',
     actorId: string,
-    actorRole: 'citizen' | 'official' | 'superadmin' | 'system',
+    actorRole: 'citizen' | 'official' | 'superadmin' | 'city_admin' | 'dept_admin' | 'ward_admin' | 'system',
     meta: any = {},
     note?: string
 ) => {
@@ -29,11 +30,23 @@ const logActivity = async (
     }
 };
 
-export const createComplaint = async (req: Request, res: Response) => {
+export const createComplaint = async (req: AuthRequest, res: Response) => {
     try {
-        const { userId, title, description, category, location, priority, attachments } = req.body;
+        const { title, description, category, location, priority, attachments } = req.body;
+        const userId = req.user!.uid;
+        const userRole = req.userProfile!.role;
 
-        if (!userId || !title || !description || !location) {
+        if (userRole !== 'citizen') {
+            // Technically officials *could* report, but requirements say "Citizens can self-signup... Capabilities: Create complaint".
+            // Let's allow it for now, or restrict if strict separation needed.
+            // Requirement: "CITIZEN: Capabilities: Create complaint".
+            // Requirement: "WARD ADMIN: Capabilities: View complaints... Change status... Upload after-image".
+            // It doesn't explicitly forbid admins from creating, but usually they don't.
+            // Let's assume ONLY citizens create for now to keep workflows clean, or allow anyone.
+            // Given "Citizen" role definition is specific, let's allow anyone to create, but they act as "citizen" when creating.
+        }
+
+        if (!title || !description || !location) {
             return res.status(400).json({ error: "Missing required fields" });
         }
 
@@ -80,19 +93,21 @@ export const createComplaint = async (req: Request, res: Response) => {
     }
 };
 
-export const updateComplaint = async (req: Request, res: Response) => {
+export const updateComplaint = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
         const updates = req.body;
-        const { actorId, actorRole } = req.body;
+        const actorId = req.user!.uid;
+        const actorRole = req.userProfile!.role;
+        const adminArea = req.userProfile!.adminArea;
+        const department = req.userProfile!.department;
 
-        if (!actorId || !actorRole) {
-            // In a real app, we'd get this from the auth token. 
-        }
-
-        // Remove actor info from updates object so we don't save it to the doc
+        // Remove sensitive fields from updates
         delete updates.actorId;
         delete updates.actorRole;
+        delete updates.userId; // Cannot change owner
+        delete updates.createdAt;
+        delete updates.verification; // Handled by specific endpoints
 
         const docRef = db.collection('complaints').doc(id);
         const docSnap = await docRef.get();
@@ -101,7 +116,44 @@ export const updateComplaint = async (req: Request, res: Response) => {
             return res.status(404).json({ error: "Complaint not found" });
         }
 
-        const currentData = docSnap.data();
+        const complaintData = docSnap.data();
+
+        // ROLE ENFORCEMENT
+        if (actorRole === 'citizen') {
+            return res.status(403).json({ error: "Citizens cannot update complaint details directly." });
+        }
+
+        if (actorRole === 'ward_admin') {
+            // Enforce Ward
+            if (complaintData?.location?.wardCode !== adminArea?.wardCode) {
+                // Fallback: Check if lat/lng falls in ward? For now, rely on tagged data.
+                // If complaint isn't tagged with ward, maybe allow if unassigned?
+                // Strict mode: Must match.
+                if (complaintData?.location?.wardCode) { // Only enforce if it HAS a ward
+                    return res.status(403).json({ error: "Unauthorized: Outside your ward." });
+                }
+            }
+        }
+
+        if (actorRole === 'dept_admin') {
+            // Enforce Department
+            if (complaintData?.category !== department && complaintData?.department !== department) {
+                // Assuming 'category' maps to department or there is a 'department' field.
+                // The requirement says "Enforce: complaint.department === user.department"
+                // But createComplaint sets 'category'. We might need to map category -> department or just check category.
+                // Let's check category for now.
+                if (complaintData?.category !== department) {
+                    return res.status(403).json({ error: "Unauthorized: Outside your department." });
+                }
+            }
+        }
+
+        // SECURITY HARDENING: Only City Admin or Super Admin can "Lock" (Flag) a complaint manually
+        if (updates.status === 'flagged' && !['city_admin', 'superadmin'].includes(actorRole)) {
+            return res.status(403).json({ error: "Unauthorized: Only City Admins can flag/lock complaints." });
+        }
+
+        const currentData = complaintData;
 
         // If location is being updated, re-tag
         if (updates.location && updates.location.lat && updates.location.lng) {
@@ -127,7 +179,7 @@ export const updateComplaint = async (req: Request, res: Response) => {
         });
 
         // Log 'admin_updated'
-        await logActivity(id, 'admin_updated', actorId || 'unknown', actorRole || 'official', {
+        await logActivity(id, 'admin_updated', actorId, actorRole, {
             updates: Object.keys(updates)
         });
 
@@ -156,10 +208,17 @@ const getUserPhone = async (userId: string): Promise<string | null> => {
     }
 };
 
-export const resolveComplaint = async (req: Request, res: Response) => {
+export const resolveComplaint = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const { actorId, proof } = req.body; // proof object: { imageUrl, note }
+        const { proof } = req.body; // proof object: { imageUrl, note }
+        const actorId = req.user!.uid;
+        const actorRole = req.userProfile!.role;
+
+        // Enforce Official Role
+        if (['citizen'].includes(actorRole)) {
+            return res.status(403).json({ error: "Citizens cannot resolve complaints." });
+        }
 
         if (!proof || !proof.imageUrl) {
             return res.status(400).json({ error: "Resolution proof with image is required" });
@@ -208,7 +267,7 @@ export const resolveComplaint = async (req: Request, res: Response) => {
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
 
-            await logActivity(id, 'admin_resolved', actorId, 'official', {
+            await logActivity(id, 'admin_resolved', actorId, actorRole, {
                 status: 'flagged_duplicate',
                 reason: 'Duplicate resolution image detected'
             }, "System flagged duplicate image. Admin penalized.");
@@ -267,7 +326,7 @@ export const resolveComplaint = async (req: Request, res: Response) => {
         });
 
         // Log Activity
-        await logActivity(id, 'admin_resolved', actorId, 'official', {
+        await logActivity(id, 'admin_resolved', actorId, actorRole, {
             newStatus,
             aiVerdict: aiVerification.verdict,
             trustScore,
@@ -292,14 +351,22 @@ export const resolveComplaint = async (req: Request, res: Response) => {
     }
 };
 
-export const verifyComplaint = async (req: Request, res: Response) => {
+export const verifyComplaint = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const { actorId } = req.body;
+        const actorId = req.user!.uid;
+        // const actorRole = req.userProfile!.role; // Should be citizen
 
         const docRef = db.collection('complaints').doc(id);
         const docSnap = await docRef.get();
         const complaintData = docSnap.data();
+
+        if (!complaintData) return res.status(404).json({ error: "Complaint not found" });
+
+        // Enforce Ownership
+        if (complaintData.userId !== actorId) {
+            return res.status(403).json({ error: "Only the creator can verify this complaint." });
+        }
 
         await docRef.update({
             status: 'resolved',
@@ -325,14 +392,23 @@ export const verifyComplaint = async (req: Request, res: Response) => {
     }
 };
 
-export const reopenComplaint = async (req: Request, res: Response) => {
+export const reopenComplaint = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const { actorId, reason } = req.body;
+        const { reason } = req.body;
+        const actorId = req.user!.uid;
 
         const docRef = db.collection('complaints').doc(id);
         const docSnap = await docRef.get();
         const complaintData = docSnap.data();
+
+        if (!complaintData) return res.status(404).json({ error: "Complaint not found" });
+
+        // Enforce Ownership
+        if (complaintData.userId !== actorId) {
+            return res.status(403).json({ error: "Only the creator can reopen this complaint." });
+        }
+
         const currentReopens = complaintData?.timesReopened || 0;
 
         await docRef.update({
@@ -388,33 +464,99 @@ export const getComplaintTimeline = async (req: Request, res: Response) => {
     }
 };
 
-export const getComplaints = async (req: Request, res: Response) => {
+export const getComplaints = async (req: AuthRequest, res: Response) => {
     try {
-        const { status, priority, requiresProof, limit, startAfter, state, district } = req.query;
+        const { status, priority, requiresProof, limit, startAfter, state, district, ward, department } = req.query;
+        const userRole = req.userProfile!.role;
+        const userId = req.user!.uid;
+        const userProfile = req.userProfile!;
 
         let query: admin.firestore.Query = db.collection('complaints');
 
+        // --- STRICT ROLE ENFORCEMENT ---
+
+        // 1. CITIZEN: Can ONLY see their own complaints
+        if (userRole === 'citizen') {
+            query = query.where('userId', '==', userId);
+        }
+
+        // 2. WARD ADMIN: Can ONLY see complaints in their assigned Ward
+        else if (userRole === 'ward_admin') {
+            const wardCode = userProfile.adminArea?.wardCode;
+            if (!wardCode) {
+                return res.status(403).json({ error: "Ward Admin has no assigned ward." });
+            }
+            query = query.where('location.wardCode', '==', wardCode);
+        }
+
+        // 3. DEPT ADMIN: Can ONLY see complaints in their Department
+        else if (userRole === 'dept_admin') {
+            const dept = userProfile.department;
+            if (!dept) {
+                return res.status(403).json({ error: "Dept Admin has no assigned department." });
+            }
+            // Assuming category maps to department or checking explicit department field
+            query = query.where('category', '==', dept);
+        }
+
+        // 4. CITY ADMIN: Can ONLY see complaints in their City
+        else if (userRole === 'city_admin') {
+            const city = userProfile.adminArea?.city;
+            if (!city) {
+                return res.status(403).json({ error: "City Admin has no assigned city." });
+            }
+            query = query.where('location.city', '==', city);
+
+            // Optional filters for City Admin
+            if (ward) query = query.where('location.wardCode', '==', ward);
+            if (department) query = query.where('category', '==', department);
+        }
+
+        // 5. SUPER ADMIN: No restrictions, but can filter
+        else if (userRole === 'superadmin') {
+            if (ward) query = query.where('location.wardCode', '==', ward);
+            if (department) query = query.where('category', '==', department);
+            if (state) query = query.where('location.stateName', '==', state);
+            if (district) query = query.where('location.districtName', '==', district);
+        }
+
+        // --- COMMON FILTERS ---
         if (status) query = query.where('status', '==', status);
         if (priority) query = query.where('priority', '==', priority);
-        if (state) query = query.where('location.stateName', '==', state);
-        if (district) query = query.where('location.districtName', '==', district);
         if (req.query.needsCommunityVote === 'true') query = query.where('verification.needsCommunityVote', '==', true);
+
+        // --- DASHBOARD SPECIFIC FILTERS ---
+        if (req.query.isEscalated === 'true') query = query.where('isEscalated', '==', true);
+
+        // Fraud Score Filter (assuming stored in 'verification.aiScore' or 'fraudScore')
+        // Let's assume we want to see high fraud risk
+        if (req.query.minFraudScore) {
+            // Note: This might require an index if combined with other filters.
+            // For now, let's filter in-memory if index is missing, or try query.
+            // Given our in-memory strategy below, we can just fetch and filter.
+            // But let's try to add it to query if possible.
+            // query = query.where('verification.aiVerdict', '==', 'LIKELY_FAKE'); 
+        }
+
+        // --- SCALABLE FIRESTORE QUERY ---
+        // Re-enabled orderBy and limit for production scalability.
+        // Requires composite indexes defined in firestore.indexes.json.
 
         query = query.orderBy('createdAt', 'desc');
 
-        if (limit) query = query.limit(Number(limit));
+        const limitNum = Number(limit) || 50;
+        query = query.limit(limitNum);
 
         if (startAfter) {
-            const startAfterDoc = await db.collection('complaints').doc(String(startAfter)).get();
-            if (startAfterDoc.exists) {
-                query = query.startAfter(startAfterDoc);
+            const lastDocSnap = await db.collection('complaints').doc(String(startAfter)).get();
+            if (lastDocSnap.exists) {
+                query = query.startAfter(lastDocSnap);
             }
         }
 
         const snapshot = await query.get();
         const complaints = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        const lastDocId = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1].id : null;
+        const lastDocId = complaints.length > 0 ? complaints[complaints.length - 1].id : null;
 
         res.json({
             complaints,
@@ -422,12 +564,7 @@ export const getComplaints = async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         console.error("Error fetching complaints:", error);
-        // Return specific error message if it's a Firestore index error
-        if (error.code === 9 || error.message?.includes('index')) {
-            res.status(500).json({ error: "Firestore Index Required. Check server logs for creation link.", details: error.message });
-        } else {
-            res.status(500).json({ error: "Internal Server Error", details: error.message });
-        }
+        res.status(500).json({ error: "Internal Server Error", details: error.message });
     }
 };
 
@@ -436,10 +573,10 @@ export { logActivity };
 
 import { analyzeFraud } from '../services/aiService';
 
-export const voteDispute = async (req: Request, res: Response) => {
+export const voteDispute = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const { actorId } = req.body;
+        const actorId = req.user!.uid;
 
         const docRef = db.collection('complaints').doc(id);
 
@@ -484,10 +621,11 @@ export const voteDispute = async (req: Request, res: Response) => {
     }
 };
 
-export const uploadCitizenProof = async (req: Request, res: Response) => {
+export const uploadCitizenProof = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const { citizen_proof_url, actorId } = req.body;
+        const { citizen_proof_url } = req.body;
+        const actorId = req.user!.uid;
 
         if (!citizen_proof_url) {
             return res.status(400).json({ error: "Proof URL required" });
@@ -510,10 +648,11 @@ export const uploadCitizenProof = async (req: Request, res: Response) => {
     }
 };
 
-export const voteResolution = async (req: Request, res: Response) => {
+export const voteResolution = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const { vote, actorId } = req.body; // "looks_fixed" or "not_fixed"
+        const { vote } = req.body; // "looks_fixed" or "not_fixed"
+        const actorId = req.user!.uid;
 
         if (!['looks_fixed', 'not_fixed'].includes(vote)) {
             return res.status(400).json({ error: "Invalid vote type" });
@@ -604,6 +743,40 @@ export const getPublicStats = async (req: Request, res: Response) => {
         });
     } catch (error) {
         console.error("Error fetching public stats:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+export const getPublicComplaints = async (req: Request, res: Response) => {
+    try {
+        const limit = Number(req.query.limit) || 50;
+        const complaintsRef = db.collection('complaints');
+
+        const snapshot = await complaintsRef
+            .orderBy('createdAt', 'desc')
+            .limit(limit)
+            .get();
+
+        const complaints = snapshot.docs.map(doc => {
+            const data = doc.data();
+            // Sanitize: Only return public fields
+            return {
+                id: doc.id,
+                title: data.title,
+                description: data.description,
+                category: data.category,
+                status: data.status,
+                location: data.location,
+                attachments: data.attachments, // Images are public evidence
+                createdAt: data.createdAt,
+                priority: data.priority,
+                // Exclude: userId, upvotedBy, internal notes, etc.
+            };
+        });
+
+        res.json({ complaints });
+    } catch (error) {
+        console.error("Error fetching public complaints:", error);
         res.status(500).json({ error: "Internal Server Error" });
     }
 };

@@ -66,9 +66,15 @@ export const RegisterPage: React.FC = () => {
             });
 
             if (data.role === 'official') {
-                navigate('/admin/analytics');
+                // Generic officials need to be assigned a specific role by a Super Admin
+                // For now, redirect them to a pending page or login, but since they are logged in,
+                // maybe send them to the main dashboard which will redirect them based on role?
+                // But they are just 'official', which has no dashboard.
+                // Let's send them to login so they can be assigned a role.
+                alert("Account created. Please ask a Super Admin to assign you a specific role (Ward/City/Dept Admin).");
+                navigate('/login');
             } else {
-                navigate('/dashboard');
+                navigate('/citizen/dashboard');
             }
         } catch (err: any) {
             setError(err.message || "Failed to register");
