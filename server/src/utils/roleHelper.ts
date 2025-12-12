@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 
-const db = admin.firestore();
+// Lazy load db
+const getDb = () => admin.firestore();
 
 export interface UserRoleInfo {
     uid: string;
@@ -15,7 +16,7 @@ export const getCurrentUserRole = async (uid: string): Promise<UserRoleInfo> => 
         throw new Error("User ID is required");
     }
 
-    const userDoc = await db.collection('users').doc(uid).get();
+    const userDoc = await getDb().collection('users').doc(uid).get();
 
     if (!userDoc.exists) {
         // Default to citizen if user doc doesn't exist (e.g. fresh auth user)
