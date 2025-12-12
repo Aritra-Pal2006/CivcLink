@@ -87,7 +87,10 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Serve static files from the React frontend app
-const frontendPath = path.join(__dirname, '../../frontend/dist');
+// Serve static files from the React frontend app
+// In production (dist/src/index.js), we need to go up 3 levels to get to root: ../../../frontend/dist
+// In development (src/index.ts), we need to go up 2 levels: ../../frontend/dist
+const frontendPath = path.join(__dirname, __dirname.includes('dist') ? '../../../frontend/dist' : '../../frontend/dist');
 app.use(express.static(frontendPath));
 
 // Health Check (API only)
