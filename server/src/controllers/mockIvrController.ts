@@ -2,7 +2,8 @@ import { Request, Response } from 'express';
 import * as admin from 'firebase-admin';
 import { sendWhatsAppMessage } from '../services/whatsappService';
 
-const db = admin.firestore();
+// Lazy load db
+const getDb = () => admin.firestore();
 
 // Mock Twilio TwiML Response Helper
 const twimlResponse = (content: any) => {
@@ -19,7 +20,7 @@ export const handleMockIvrWebhook = async (req: Request, res: Response) => {
         console.log(`📞 Mock IVR Webhook: ${CallSid} | From: ${From} | Digits: ${Digits} | Rec: ${RecordingUrl}`);
 
         // Log the call step
-        await db.collection('mockIvrCalls').doc(CallSid).set({
+        await getDb().collection('mockIvrCalls').doc(CallSid).set({
             from: From,
             lastUpdate: admin.firestore.FieldValue.serverTimestamp(),
             steps: admin.firestore.FieldValue.arrayUnion({
@@ -65,14 +66,14 @@ export const handleMockIvrWebhook = async (req: Request, res: Response) => {
             // Create Complaint
             // We need to map phone number to a user ID or create a temp one
             let userId = 'mock-ivr-user';
-            const userSnapshot = await db.collection('users').where('phoneNumber', '==', From).limit(1).get();
+            const userSnapshot = await getDb().collection('users').where('phoneNumber', '==', From).limit(1).get();
 
             if (!userSnapshot.empty) {
                 userId = userSnapshot.docs[0].id;
             } else {
                 // Create a temp user if not exists (optional, or just use a generic IVR user)
                 // For demo, let's try to find or create
-                const newUserRef = db.collection('users').doc();
+                const newUserRef = getDb().collection('users').doc();
                 await newUserRef.set({
                     phoneNumber: From,
                     role: 'citizen',
@@ -89,7 +90,7 @@ export const handleMockIvrWebhook = async (req: Request, res: Response) => {
             // or just inserting directly to ensure it works exactly as expected.
 
             // Actually, let's do it properly by inserting into DB to match exactly what createComplaint does.
-            const complaintRef = db.collection('complaints').doc();
+            const complaintRef = getDb().collection('complaints').doc();
             const ticketId = `CIV-${complaintRef.id.slice(-5).toUpperCase()}`;
 
             const complaintData = {
@@ -119,7 +120,7 @@ export const handleMockIvrWebhook = async (req: Request, res: Response) => {
             await complaintRef.set(complaintData);
 
             // Log result
-            await db.collection('mockIvrCalls').doc(CallSid).set({
+            await getDb().collection('mockIvrCalls').doc(CallSid).set({
                 complaintId: complaintRef.id,
                 ticketId: ticketId,
                 status: 'COMPLAINT_CREATED'

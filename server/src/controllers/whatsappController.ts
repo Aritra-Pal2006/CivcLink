@@ -6,7 +6,8 @@ import { lookupAdminArea } from '../utils/geoTagger';
 import { logActivity } from './complaintController';
 import { sendWhatsAppMessage } from '../services/whatsappService';
 
-const db = admin.firestore();
+// Lazy load db
+const getDb = () => admin.firestore();
 
 // --- Types & Interfaces ---
 type BotState =
@@ -117,7 +118,7 @@ export const handleIncomingWebhook = async (req: Request, res: Response) => {
 
     try {
         // 1. Get User State
-        const userRef = db.collection('whatsapp_users').doc(phoneNumber);
+        const userRef = getDb().collection('whatsapp_users').doc(phoneNumber);
         const userDoc = await userRef.get();
         let user: WhatsAppUser = userDoc.exists ? userDoc.data() as WhatsAppUser : {
             phone: phoneNumber,
@@ -162,7 +163,7 @@ export const handleIncomingWebhook = async (req: Request, res: Response) => {
         if (lowerBody.startsWith('status civ-')) {
             const ticketId = body.split(' ')[1]?.toUpperCase() || body.toUpperCase();
             // Search by ticketId (we need to query)
-            const snapshot = await db.collection('complaints').where('ticketId', '==', ticketId).limit(1).get();
+            const snapshot = await getDb().collection('complaints').where('ticketId', '==', ticketId).limit(1).get();
             if (snapshot.empty) {
                 await sendWhatsAppMessage(from, getMsg(user.lang, 'not_found'));
             } else {
@@ -181,7 +182,7 @@ export const handleIncomingWebhook = async (req: Request, res: Response) => {
         // REOPEN (reopen CIV-XXXX)
         if (lowerBody.startsWith('reopen civ-')) {
             const ticketId = body.split(' ')[1]?.toUpperCase();
-            const snapshot = await db.collection('complaints').where('ticketId', '==', ticketId).limit(1).get();
+            const snapshot = await getDb().collection('complaints').where('ticketId', '==', ticketId).limit(1).get();
 
             if (!snapshot.empty) {
                 const doc = snapshot.docs[0];
@@ -238,7 +239,7 @@ export const handleIncomingWebhook = async (req: Request, res: Response) => {
                     // Wait, we need the userId.
                     let userId = await getUserIdFromPhone(phoneNumber);
                     if (userId) {
-                        const mySnaps = await db.collection('complaints')
+                        const mySnaps = await getDb().collection('complaints')
                             .where('userId', '==', userId)
                             .get();
 
@@ -355,7 +356,7 @@ const getUserIdFromPhone = async (phoneNumber: string): Promise<string> => {
                 phoneNumber: phoneNumber,
                 displayName: `WhatsApp User ${phoneNumber.slice(-4)}`
             });
-            await db.collection('users').doc(newUser.uid).set({
+            await getDb().collection('users').doc(newUser.uid).set({
                 phoneNumber,
                 role: 'citizen',
                 createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -424,7 +425,7 @@ const createComplaintFromSession = async (phoneNumber: string, data: any, attach
     }));
 
     // Create Doc
-    const docRef = await db.collection('complaints').add({
+    const docRef = await getDb().collection('complaints').add({
         userId,
         title: data.title,
         description: data.description,

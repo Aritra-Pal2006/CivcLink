@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import * as admin from 'firebase-admin';
 
-const db = admin.firestore();
+// Lazy load db
+const getDb = () => admin.firestore();
 
 export const updateLocale = async (req: Request, res: Response) => {
     try {
@@ -12,7 +13,7 @@ export const updateLocale = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Locale is required' });
         }
 
-        await db.collection('users').doc(uid).set({
+        await getDb().collection('users').doc(uid).set({
             locale: locale,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });

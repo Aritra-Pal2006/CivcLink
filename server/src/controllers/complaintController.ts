@@ -11,7 +11,8 @@ import { createClient } from '@deepgram/sdk';
 const deepgram = createClient(process.env.DEEPGRAM_API_KEY || '');
 
 
-const db = admin.firestore();
+// Lazy load db
+const getDb = () => admin.firestore();
 
 // Helper to log activity
 const logActivity = async (
@@ -23,7 +24,7 @@ const logActivity = async (
     note?: string
 ) => {
     try {
-        await db.collection(`complaints/${complaintId}/complaintActivity`).add({
+        await getDb().collection(`complaints/${complaintId}/complaintActivity`).add({
             type,
             actorId,
             actorRole,
@@ -39,7 +40,7 @@ const logActivity = async (
 // Helper to get user phone
 const getUserPhone = async (userId: string): Promise<string | null> => {
     try {
-        const userDoc = await db.collection('users').doc(userId).get();
+        const userDoc = await getDb().collection('users').doc(userId).get();
         if (userDoc.exists) {
             return userDoc.data()?.phoneNumber || null;
         }
@@ -95,7 +96,7 @@ export const createComplaint = async (req: Request, res: Response) => {
             const lng = location.lng;
             const range = 0.001;
 
-            const nearbySnapshot = await db.collection('complaints')
+            const nearbySnapshot = await getDb().collection('complaints')
                 .where('location.lat', '>=', lat - range)
                 .where('location.lat', '<=', lat + range)
                 .get();
@@ -119,7 +120,7 @@ export const createComplaint = async (req: Request, res: Response) => {
 
                         // Increment support count on the PARENT complaint
                         try {
-                            await db.collection('complaints').doc(doc.id).update({
+                            await getDb().collection('complaints').doc(doc.id).update({
                                 supportCount: admin.firestore.FieldValue.increment(1)
                             });
                         } catch (e) {
@@ -158,7 +159,7 @@ export const createComplaint = async (req: Request, res: Response) => {
             isOverdue: false
         };
 
-        const docRef = await db.collection('complaints').add(complaintData);
+        const docRef = await getDb().collection('complaints').add(complaintData);
 
         // Log 'created' activity
         await logActivity(docRef.id, 'created', userId, 'citizen', {
@@ -186,7 +187,7 @@ export const getComplaints = async (req: Request, res: Response) => {
         const { role, adminLevel, assignedWard, assignedCity } = await getCurrentUserRole(uid);
         const { status, priority, limit, state, district } = req.query;
 
-        let query: admin.firestore.Query = db.collection('complaints');
+        let query: admin.firestore.Query = getDb().collection('complaints');
 
         if (role === 'citizen') {
             // Citizen sees ONLY their own complaints
@@ -290,7 +291,7 @@ export const updateComplaint = async (req: Request, res: Response) => {
         delete updates.actorId;
         delete updates.actorRole;
 
-        const docRef = db.collection('complaints').doc(id);
+        const docRef = getDb().collection('complaints').doc(id);
         const docSnap = await docRef.get();
 
         if (!docSnap.exists) {
@@ -359,7 +360,7 @@ export const resolveComplaint = async (req: Request, res: Response) => {
             return res.status(400).json({ error: "Resolution proof with image is required" });
         }
 
-        const docRef = db.collection('complaints').doc(id);
+        const docRef = getDb().collection('complaints').doc(id);
         const docSnap = await docRef.get();
 
         if (!docSnap.exists) return res.status(404).json({ error: "Complaint not found" });
@@ -412,7 +413,7 @@ export const resolveComplaint = async (req: Request, res: Response) => {
         const userPhone = await getUserPhone(docSnap.data()?.userId);
         if (userPhone) {
             // Fetch user locale
-            const userDoc = await db.collection('users').doc(docSnap.data()?.userId).get();
+            const userDoc = await getDb().collection('users').doc(docSnap.data()?.userId).get();
             const userLocale = userDoc.data()?.locale || 'en';
 
             await sendLocalizedWhatsAppMessage(
@@ -442,7 +443,7 @@ export const reopenComplaint = async (req: Request, res: Response) => {
             return res.status(403).json({ error: "Only citizens can reopen complaints" });
         }
 
-        const docRef = db.collection('complaints').doc(id);
+        const docRef = getDb().collection('complaints').doc(id);
         const docSnap = await docRef.get();
 
         if (!docSnap.exists) return res.status(404).json({ error: "Complaint not found" });
@@ -488,7 +489,7 @@ export const rejectComplaint = async (req: Request, res: Response) => {
             return res.status(403).json({ error: "Only admins can reject complaints" });
         }
 
-        const docRef = db.collection('complaints').doc(id);
+        const docRef = getDb().collection('complaints').doc(id);
         const docSnap = await docRef.get();
 
         if (!docSnap.exists) return res.status(404).json({ error: "Complaint not found" });
@@ -514,7 +515,7 @@ export const rejectComplaint = async (req: Request, res: Response) => {
         const userPhone = await getUserPhone(docSnap.data()?.userId);
         if (userPhone) {
             // Fetch user locale
-            const userDoc = await db.collection('users').doc(docSnap.data()?.userId).get();
+            const userDoc = await getDb().collection('users').doc(docSnap.data()?.userId).get();
             const userLocale = userDoc.data()?.locale || 'en';
 
             await sendLocalizedWhatsAppMessage(
@@ -552,7 +553,7 @@ export const voteResolution = async (req: Request, res: Response) => {
 export const getComplaintTimeline = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const snapshot = await db.collection(`complaints/${id}/complaintActivity`)
+        const snapshot = await getDb().collection(`complaints/${id}/complaintActivity`)
             .orderBy('timestamp', 'asc')
             .get();
 
@@ -569,7 +570,7 @@ export const getPublicStats = async (req: Request, res: Response) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        const complaintsRef = db.collection('complaints');
+        const complaintsRef = getDb().collection('complaints');
 
         const [totalSnap, resolvedSnap, todaySnap] = await Promise.all([
             complaintsRef.count().get(),
@@ -601,7 +602,7 @@ export const getAdminStats = async (req: Request, res: Response) => {
             return res.status(403).json({ error: "Access Denied" });
         }
 
-        let baseQuery: admin.firestore.Query = db.collection('complaints');
+        let baseQuery: admin.firestore.Query = getDb().collection('complaints');
 
         // Apply Role Filters (Same logic as getComplaints)
         if (adminLevel === 'ward' && assignedWard) {
@@ -649,7 +650,7 @@ export const getEscalatedComplaints = async (req: Request, res: Response) => {
             return res.status(403).json({ error: "Access Denied: City Admin only" });
         }
 
-        const snapshot = await db.collection('complaints')
+        const snapshot = await getDb().collection('complaints')
             .where('escalationTriggered', '==', true)
             .orderBy('escalatedAt', 'desc')
             .limit(50)
@@ -665,7 +666,7 @@ export const getEscalatedComplaints = async (req: Request, res: Response) => {
 
 export const getPublicFeed = async (req: Request, res: Response) => {
     try {
-        const snapshot = await db.collection('complaints')
+        const snapshot = await getDb().collection('complaints')
             .orderBy('updatedAt', 'desc')
             .limit(20)
             .get();
@@ -707,7 +708,7 @@ export const transcribeComplaint = async (req: Request, res: Response) => {
             return res.status(403).json({ error: "Only admins can request transcription" });
         }
 
-        const docRef = db.collection('complaints').doc(id);
+        const docRef = getDb().collection('complaints').doc(id);
         const docSnap = await docRef.get();
 
         if (!docSnap.exists) {
