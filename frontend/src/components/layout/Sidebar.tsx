@@ -1,33 +1,34 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, PlusCircle, Settings, Map, LogOut, Users } from 'lucide-react';
+import { LayoutDashboard, FileText, PlusCircle, Settings, Map, LogOut, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../../contexts/LanguageContext';
 import clsx from 'clsx';
+import { LanguageSelector } from '../common/LanguageSelector';
 
 export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
     const { userProfile, logout } = useAuth();
     const location = useLocation();
-    const { t, i18n } = useTranslation();
+    const { t } = useLanguage();
 
     const navigation = [
-        { name: t('dashboard'), href: '/dashboard', icon: LayoutDashboard },
+        { name: t('dashboard.title'), href: '/dashboard', icon: LayoutDashboard },
         { name: t('community_feed'), href: '/feed', icon: Map },
-        { name: 'Community Verify', href: '/community-verification', icon: Users },
         ...(userProfile?.role === 'citizen' ? [
-            { name: t('new_complaint'), href: '/complaints/new', icon: PlusCircle },
-            { name: t('my_complaints'), href: '/complaints', icon: FileText },
+            { name: t('newComplaint'), href: '/complaints/new', icon: PlusCircle },
+            { name: t('myComplaints'), href: '/complaints', icon: FileText },
         ] : []),
-        ...(userProfile?.role === 'official' || userProfile?.role === 'superadmin' ? [
-            { name: 'All Complaints', href: '/admin/complaints', icon: FileText },
-            { name: 'Analytics', href: '/admin/analytics', icon: Map },
+        ...(userProfile?.role === 'admin' ? [
+            { name: t('admin.allComplaints'), href: '/admin/complaints', icon: FileText },
+            { name: t('admin.analytics'), href: '/admin/analytics', icon: Map },
+            ...(userProfile.adminLevel === 'city' ? [
+                { name: t('admin.escalations'), href: '/admin/escalations', icon: AlertCircle } // Need to import AlertCircle
+            ] : [])
         ] : []),
-        { name: 'Settings', href: '/settings', icon: Settings },
+        { name: t('settings'), href: '/settings', icon: Settings },
     ];
 
-    const changeLanguage = (lng: string) => {
-        i18n.changeLanguage(lng);
-    };
+
 
     return (
         <>
@@ -45,8 +46,15 @@ export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ is
                 "fixed inset-y-0 left-0 z-30 w-64 bg-white/10 backdrop-blur-xl border-r border-white/20 shadow-2xl transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
                 isOpen ? "translate-x-0" : "-translate-x-full"
             )}>
-                <div className="flex items-center justify-center h-16 bg-primary-600/90 backdrop-blur-sm border-b border-white/10">
-                    <span className="text-white text-2xl font-bold tracking-wider drop-shadow-md">{t('app_title')}</span>
+                <div className="flex flex-col items-center justify-center h-20 bg-primary-600/90 backdrop-blur-sm border-b border-white/10">
+                    <span className="text-white text-2xl font-bold tracking-wider drop-shadow-md">{t('appTitle')}</span>
+                    {userProfile?.role === 'admin' && (
+                        <span className="text-xs text-primary-200 font-medium mt-1 px-2 py-0.5 rounded bg-black/20">
+                            {userProfile.adminLevel === 'ward'
+                                ? `Ward Admin: ${userProfile.assignedWard || 'N/A'}`
+                                : 'City Admin'}
+                        </span>
+                    )}
                 </div>
 
                 <nav className="mt-5 px-2 space-y-1 flex-1 overflow-y-auto">
@@ -76,10 +84,8 @@ export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ is
                 </nav>
 
                 <div className="border-t border-white/10 p-4 bg-black/10">
-                    <div className="flex justify-around mb-4">
-                        <button onClick={() => changeLanguage('en')} className={`text-xs font-bold ${i18n.language === 'en' ? 'text-primary-300' : 'text-primary-200/50 hover:text-white'}`}>EN</button>
-                        <button onClick={() => changeLanguage('hi')} className={`text-xs font-bold ${i18n.language === 'hi' ? 'text-primary-300' : 'text-primary-200/50 hover:text-white'}`}>HI</button>
-                        <button onClick={() => changeLanguage('es')} className={`text-xs font-bold ${i18n.language === 'es' ? 'text-primary-300' : 'text-primary-200/50 hover:text-white'}`}>ES</button>
+                    <div className="flex justify-center mb-4">
+                        <LanguageSelector />
                     </div>
                     <button
                         onClick={() => {
@@ -89,7 +95,7 @@ export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ is
                         className="flex items-center w-full px-2 py-2 text-base font-medium text-red-300 rounded-md hover:bg-red-500/20 hover:text-red-100 group transition-colors"
                     >
                         <LogOut className="mr-4 h-6 w-6" />
-                        {t('sign_out')}
+                        {t('common.logout')}
                     </button>
                 </div>
             </div>

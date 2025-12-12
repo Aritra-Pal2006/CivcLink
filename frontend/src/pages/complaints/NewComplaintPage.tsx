@@ -6,27 +6,41 @@ import { createComplaint } from '../../services/complaintService';
 import { useAuth } from '../../contexts/AuthContext';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Mic, Square, Loader2 } from 'lucide-react';
+
+import { useLanguage } from '../../contexts/LanguageContext';
 
 const complaintSchema = z.object({
     title: z.string().min(5, "Title must be at least 5 characters"),
     description: z.string().min(20, "Description must be at least 20 characters"),
     category: z.string().optional(),
+    isAnonymous: z.boolean().optional(),
 });
 
 type ComplaintFormInputs = z.infer<typeof complaintSchema>;
 
 export const NewComplaintPage: React.FC = () => {
-    const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<ComplaintFormInputs>({
-        resolver: zodResolver(complaintSchema)
+    const { register, handleSubmit, watch, reset, setValue, formState: { errors } } = useForm<ComplaintFormInputs>({
+        resolver: zodResolver(complaintSchema),
+        defaultValues: {
+            isAnonymous: false
+        }
     });
     const { currentUser } = useAuth();
+    const { t } = useLanguage();
     const navigate = useNavigate();
     const [step, setStep] = useState(1);
     const [location, setLocation] = useState<{ lat: number; lng: number; address: string } | null>(null);
+    const [ward, setWard] = useState('');
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState<ComplaintFormInputs | null>(null);
     const [attachment, setAttachment] = useState<File | null>(null);
+
+    // Voice Input State
+    const [isRecording, setIsRecording] = useState(false);
+    const [transcribing, setTranscribing] = useState(false);
+    const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
+    const audioChunksRef = React.useRef<Blob[]>([]);
 
     // Watch form inputs for changes
     const formValues = watch();
@@ -36,9 +50,10 @@ export const NewComplaintPage: React.FC = () => {
         const savedDraft = localStorage.getItem('complaintDraft');
         if (savedDraft) {
             try {
-                const { step: savedStep, location: savedLocation, formData: savedFormData, formValues: savedFormValues } = JSON.parse(savedDraft);
+                const { step: savedStep, location: savedLocation, ward: savedWard, formData: savedFormData, formValues: savedFormValues } = JSON.parse(savedDraft);
                 if (savedStep) setStep(savedStep);
                 if (savedLocation) setLocation(savedLocation);
+                if (savedWard) setWard(savedWard);
                 if (savedFormData) setFormData(savedFormData);
                 if (savedFormValues) reset(savedFormValues);
             } catch (e) {
@@ -52,15 +67,66 @@ export const NewComplaintPage: React.FC = () => {
         const draft = {
             step,
             location,
+            ward,
             formData, // Confirmed data from step 1
             formValues // Current values in inputs
         };
         localStorage.setItem('complaintDraft', JSON.stringify(draft));
-    }, [step, location, formData, formValues]);
+    }, [step, location, ward, formData, formValues]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             setAttachment(e.target.files[0]);
+        }
+    };
+
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mediaRecorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = mediaRecorder;
+            audioChunksRef.current = [];
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunksRef.current.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                setTranscribing(true);
+                try {
+                    const { transcribeAudio } = await import('../../services/complaintService');
+                    const result = await transcribeAudio(audioBlob);
+                    if (result.transcript) {
+                        const currentDesc = watch('description') || '';
+                        // Append to existing description
+                        const newDesc = currentDesc ? `${currentDesc} ${result.transcript}` : result.transcript;
+                        setValue('description', newDesc);
+                    }
+                } catch (error) {
+                    console.error("Transcription failed", error);
+                    alert("Failed to transcribe audio. Please try again.");
+                } finally {
+                    setTranscribing(false);
+                    // Stop all tracks
+                    stream.getTracks().forEach(track => track.stop());
+                }
+            };
+
+            mediaRecorder.start();
+            setIsRecording(true);
+        } catch (error) {
+            console.error("Error accessing microphone:", error);
+            alert("Could not access microphone. Please ensure permissions are granted.");
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && isRecording) {
+            mediaRecorderRef.current.stop();
+            setIsRecording(false);
         }
     };
 
@@ -139,8 +205,12 @@ export const NewComplaintPage: React.FC = () => {
                 category: aiResult.category,
                 priority: aiResult.priority,
                 aiSummary: aiResult.aiSummary,
-                location: location,
-                attachments: uploadedAttachments
+                location: {
+                    ...location,
+                    wardCode: ward ? ward.trim().toUpperCase().replace(/\s+/g, '_') : undefined
+                },
+                attachments: uploadedAttachments,
+                isAnonymous: formData.isAnonymous
             });
 
             // Clear draft after successful submission
@@ -158,9 +228,9 @@ export const NewComplaintPage: React.FC = () => {
     return (
         <div className="max-w-3xl mx-auto">
             <div className="mb-8">
-                <h1 className="text-2xl font-bold text-white drop-shadow-md">File a New Complaint</h1>
+                <h1 className="text-2xl font-bold text-white drop-shadow-md">{t('newComplaint')}</h1>
                 <p className="mt-1 text-sm text-primary-100">
-                    Please provide details about the issue. AI will help categorize and route it.
+                    {t('welcome')}
                 </p>
             </div>
 
@@ -196,7 +266,34 @@ export const NewComplaintPage: React.FC = () => {
                         </div>
 
                         <div>
-                            <label htmlFor="description" className="block text-sm font-medium text-white">Description</label>
+                            <div className="flex justify-between items-center mb-1">
+                                <label htmlFor="description" className="block text-sm font-medium text-white">Description</label>
+                                <button
+                                    type="button"
+                                    onClick={isRecording ? stopRecording : startRecording}
+                                    disabled={transcribing}
+                                    className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium transition-all ${isRecording
+                                        ? 'bg-red-500/20 text-red-400 border border-red-500/50 animate-pulse'
+                                        : transcribing
+                                            ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
+                                            : 'bg-white/10 text-primary-200 hover:bg-white/20 border border-white/10'
+                                        }`}
+                                >
+                                    {isRecording ? (
+                                        <>
+                                            <Square className="h-3 w-3 fill-current" /> Stop Recording
+                                        </>
+                                    ) : transcribing ? (
+                                        <>
+                                            <Loader2 className="h-3 w-3 animate-spin" /> Transcribing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Mic className="h-3 w-3" /> Voice Input
+                                        </>
+                                    )}
+                                </button>
+                            </div>
                             <textarea
                                 id="description"
                                 rows={4}
@@ -208,7 +305,7 @@ export const NewComplaintPage: React.FC = () => {
                         </div>
 
                         <div>
-                            <label htmlFor="category" className="block text-sm font-medium text-white">Category (Optional)</label>
+                            <label htmlFor="category" className="block text-sm font-medium text-white">{t('categoryLabel')} (Optional)</label>
                             <select
                                 id="category"
                                 className="mt-1 block w-full bg-black/20 border border-white/20 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
@@ -224,6 +321,18 @@ export const NewComplaintPage: React.FC = () => {
                             <p className="mt-1 text-xs text-primary-200">
                                 If you leave this blank, our AI will automatically categorize it for you.
                             </p>
+                        </div>
+
+                        <div className="flex items-center">
+                            <input
+                                id="isAnonymous"
+                                type="checkbox"
+                                className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                                {...register("isAnonymous")}
+                            />
+                            <label htmlFor="isAnonymous" className="ml-2 block text-sm text-white">
+                                {t('anonymousLabel')}
+                            </label>
                         </div>
 
                         <div>
@@ -293,6 +402,21 @@ export const NewComplaintPage: React.FC = () => {
 
                         <div className="rounded-lg overflow-hidden border border-white/20">
                             <LocationPicker onLocationSelect={handleLocationSelect} />
+                        </div>
+
+                        <div>
+                            <label htmlFor="ward" className="block text-sm font-medium text-white">Ward Number (Optional)</label>
+                            <input
+                                type="text"
+                                id="ward"
+                                value={ward}
+                                onChange={(e) => setWard(e.target.value)}
+                                className="mt-1 block w-full bg-black/20 border border-white/20 rounded-md shadow-sm py-2 px-3 text-white placeholder-white/40 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                                placeholder="e.g., WARD_12 (Will be auto-formatted to uppercase/underscores)"
+                            />
+                            <p className="mt-1 text-xs text-primary-200">
+                                System format: WARD_XX. Your input will be converted (e.g., "ward 12" &rarr; "WARD_12").
+                            </p>
                         </div>
 
                         <div className="flex justify-between pt-4">

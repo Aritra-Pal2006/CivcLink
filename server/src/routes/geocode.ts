@@ -32,4 +32,28 @@ router.get('/reverse', async (req, res) => {
     }
 });
 
+import { getWardGrid } from '../utils/geoTagger';
+
+router.get('/wards', (req, res) => {
+    try {
+        const { minLat, minLng, maxLat, maxLng } = req.query;
+
+        if (!minLat || !minLng || !maxLat || !maxLng) {
+            return res.status(400).json({ error: "Missing bounds (minLat, minLng, maxLat, maxLng)" });
+        }
+
+        const grid = getWardGrid(
+            parseFloat(minLat as string),
+            parseFloat(minLng as string),
+            parseFloat(maxLat as string),
+            parseFloat(maxLng as string)
+        );
+
+        res.json(grid);
+    } catch (error) {
+        console.error("Error generating ward grid:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
 export default router;

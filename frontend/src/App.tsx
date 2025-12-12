@@ -10,10 +10,13 @@ import { ComplaintListPage } from './pages/complaints/ComplaintListPage';
 import { ComplaintDetailPage } from './pages/complaints/ComplaintDetailPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import { AdminComplaintTablePage } from './pages/admin/AdminComplaintTablePage';
+import { CityEscalationPage } from './pages/admin/CityEscalationPage';
+import { MockIvrPage } from './pages/admin/MockIvrPage';
 import { PublicFeedPage } from './pages/complaints/PublicFeedPage';
 import { PublicDashboard } from './pages/public/PublicDashboard';
 import { LandingPage } from './pages/public/LandingPage';
-import { CommunityVerificationPage } from './pages/public/CommunityVerificationPage';
+import { PublicAuditPage } from './pages/public/PublicAuditPage';
+import PublicStatsPage from './pages/public/PublicStatsPage';
 
 function App() {
   return (
@@ -26,7 +29,8 @@ function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/public" element={<PublicFeedPage />} />
           <Route path="/public-dashboard" element={<PublicDashboard />} />
-          <Route path="/community-verification" element={<CommunityVerificationPage />} />
+          <Route path="/public/audit" element={<PublicAuditPage />} />
+          <Route path="/public/stats" element={<PublicStatsPage />} />
 
           {/* Protected Routes */}
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
@@ -36,12 +40,13 @@ function App() {
             <Route path="/complaints" element={<ComplaintListPage />} />
             <Route path="/complaints/new" element={<NewComplaintPage />} />
             <Route path="/complaints/:id" element={<ComplaintDetailPage />} />
-            <Route path="/complaints/:id" element={<ComplaintDetailPage />} />
 
             {/* Admin Routes */}
-            <Route element={<ProtectedRoute allowedRoles={['official', 'superadmin']}><Outlet /></ProtectedRoute>}>
+            <Route element={<ProtectedRoute allowedRoles={['admin']}><Outlet /></ProtectedRoute>}>
               <Route path="/admin/complaints" element={<AdminComplaintTablePage />} />
               <Route path="/admin/analytics" element={<AdminDashboardPage />} />
+              <Route path="/admin/escalations" element={<CityEscalationPage />} />
+              <Route path="/admin/mock-ivr" element={<MockIvrPage />} />
             </Route>
 
             <Route path="/settings" element={<div>Settings (Coming Soon)</div>} />

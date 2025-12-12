@@ -3,8 +3,7 @@ import React from 'react';
 interface Filters {
     status: string;
     priority: string;
-    state?: string;
-    district?: string;
+    ward?: string;
 }
 
 interface AdminFiltersProps {
@@ -21,23 +20,16 @@ const AdminFilters: React.FC<AdminFiltersProps> = ({ filters, onFilterChange }) 
         onFilterChange({ ...filters, priority: e.target.value });
     };
 
-    const handleStateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        onFilterChange({ ...filters, state: e.target.value, district: '' }); // Reset district when state changes
+    const handleWardChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value.toUpperCase().replace(/\s+/g, '_');
+        // If user types just a number, prepend WARD_
+        // But for filter input, maybe just let them type? 
+        // Let's normalize to WARD_XX if they type a number, or just pass what they type if it's partial?
+        // Actually, for better UX, let's just let them type the number and we prepend WARD_ on blur or just handle it.
+        // Let's just pass the raw value for now, but maybe hint "WARD_12".
+        // Or better: Input "12" -> "WARD_12"
+        onFilterChange({ ...filters, ward: val });
     };
-
-    const handleDistrictChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        onFilterChange({ ...filters, district: e.target.value });
-    };
-
-    // Full list of Indian States and UTs
-    const states = [
-        "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana",
-        "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur",
-        "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana",
-        "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
-        "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi",
-        "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
-    ];
 
     return (
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex flex-col gap-4">
@@ -74,24 +66,12 @@ const AdminFilters: React.FC<AdminFiltersProps> = ({ filters, onFilterChange }) 
                 </div>
 
                 <div className="flex flex-col">
-                    <label className="text-xs font-semibold text-gray-500 mb-1">State</label>
-                    <select
-                        value={filters.state || ''}
-                        onChange={handleStateChange}
-                        className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px]"
-                    >
-                        <option value="">All States</option>
-                        {states.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                </div>
-
-                <div className="flex flex-col">
-                    <label className="text-xs font-semibold text-gray-500 mb-1">District</label>
+                    <label className="text-xs font-semibold text-gray-500 mb-1">Ward Number</label>
                     <input
                         type="text"
-                        placeholder="District Name"
-                        value={filters.district || ''}
-                        onChange={handleDistrictChange}
+                        placeholder="e.g. WARD_12"
+                        value={filters.ward || ''}
+                        onChange={handleWardChange}
                         className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                 </div>
@@ -99,15 +79,6 @@ const AdminFilters: React.FC<AdminFiltersProps> = ({ filters, onFilterChange }) 
 
             {/* Quick Filters */}
             <div className="flex gap-2 items-center">
-                <button
-                    onClick={() => onFilterChange({ ...filters, status: 'pending_verification' })}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${filters.status === 'pending_verification'
-                        ? 'bg-yellow-100 text-yellow-800 border border-yellow-200'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                >
-                    Pending Verification
-                </button>
                 <button
                     onClick={() => onFilterChange({ ...filters, status: 'reopened' })}
                     className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${filters.status === 'reopened'
@@ -127,9 +98,9 @@ const AdminFilters: React.FC<AdminFiltersProps> = ({ filters, onFilterChange }) 
                     High Priority
                 </button>
 
-                {(filters.status || filters.priority || filters.state || filters.district) && (
+                {(filters.status || filters.priority || filters.ward) && (
                     <button
-                        onClick={() => onFilterChange({ status: '', priority: '', state: '', district: '' })}
+                        onClick={() => onFilterChange({ status: '', priority: '', ward: '' })}
                         className="ml-auto text-xs text-blue-600 hover:text-blue-800 underline"
                     >
                         Clear Filters

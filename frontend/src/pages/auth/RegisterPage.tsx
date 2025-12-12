@@ -6,31 +6,35 @@ import { auth, db } from '../../lib/firebase';
 import { Link, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2, AlertCircle, ArrowRight, UserPlus, ShieldCheck } from 'lucide-react';
-
-const ADMIN_SECRET_CODE = "CIVIC_ADMIN_2024"; // Hardcoded secret for demo purposes
+import { Loader2, AlertCircle, ArrowRight, UserPlus, MapPin } from 'lucide-react';
 
 const registerSchema = z.object({
     name: z.string().min(2, "Name is required"),
     email: z.string().email("Invalid email address"),
     password: z.string().min(6, "Password must be at least 6 characters"),
     confirmPassword: z.string(),
-    role: z.enum(["citizen", "official"] as const),
-    adminCode: z.string().optional(),
+    role: z.enum(["citizen", "ward_admin", "city_admin"] as const),
+    wardNumber: z.string().optional(),
+    city: z.string().optional(),
 }).refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match",
     path: ["confirmPassword"],
 }).refine((data) => {
-    if (data.role === 'official') {
-        return data.adminCode === ADMIN_SECRET_CODE;
+    if (data.role === 'ward_admin') {
+        return !!data.wardNumber;
+    }
+    if (data.role === 'city_admin') {
+        return !!data.city;
     }
     return true;
 }, {
-    message: "Invalid Admin Access Code",
-    path: ["adminCode"],
+    message: "Required field missing",
+    path: ["wardNumber"], // This path might need to be dynamic or generic error
 });
 
 type RegisterFormInputs = z.infer<typeof registerSchema>;
+
+const CITIES = ["Delhi", "Mumbai", "Kolkata", "Bangalore", "Chennai", "Hyderabad", "Pune"];
 
 export const RegisterPage: React.FC = () => {
     const { register, handleSubmit, watch, formState: { errors } } = useForm<RegisterFormInputs>({
@@ -56,16 +60,28 @@ export const RegisterPage: React.FC = () => {
                 displayName: data.name
             });
 
-            await setDoc(doc(db, "users", user.uid), {
+            let userData: any = {
                 uid: user.uid,
                 email: data.email,
                 displayName: data.name,
-                role: data.role,
+                role: data.role === 'citizen' ? 'citizen' : 'admin',
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
-            });
+            };
 
-            if (data.role === 'official') {
+            if (data.role === 'city_admin') {
+                userData.adminLevel = 'city';
+                userData.department = 'City Administration';
+                userData.assignedCity = data.city;
+            } else if (data.role === 'ward_admin') {
+                userData.adminLevel = 'ward';
+                userData.assignedWard = `WARD_${data.wardNumber}`; // Standardize format
+                userData.department = 'Ward Administration';
+            }
+
+            await setDoc(doc(db, "users", user.uid), userData);
+
+            if (data.role !== 'citizen') {
                 navigate('/admin/analytics');
             } else {
                 navigate('/dashboard');
@@ -150,23 +166,43 @@ export const RegisterPage: React.FC = () => {
                                     {...register("role")}
                                 >
                                     <option value="citizen" className="text-gray-900">Citizen</option>
-                                    <option value="official" className="text-gray-900">Official (Requires Code)</option>
+                                    <option value="ward_admin" className="text-gray-900">Ward Admin</option>
+                                    <option value="city_admin" className="text-gray-900">City Admin</option>
                                 </select>
                             </div>
 
-                            {selectedRole === 'official' && (
+                            {selectedRole === 'ward_admin' && (
                                 <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                                    <label htmlFor="adminCode" className="block text-sm font-medium text-yellow-300 mb-1 ml-1 flex items-center">
-                                        <ShieldCheck className="w-4 h-4 mr-1" /> Admin Access Code
+                                    <label htmlFor="wardNumber" className="block text-sm font-medium text-yellow-300 mb-1 ml-1 flex items-center">
+                                        <MapPin className="w-4 h-4 mr-1" /> Ward Number
                                     </label>
                                     <input
-                                        id="adminCode"
-                                        type="password"
-                                        className={`block w-full px-4 py-3 rounded-xl bg-yellow-500/10 border ${errors.adminCode ? 'border-red-400/50' : 'border-yellow-500/30'} text-white placeholder-yellow-200/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-transparent focus:bg-black/30 transition-all duration-200 backdrop-blur-sm`}
-                                        placeholder="Enter secret code"
-                                        {...register("adminCode")}
+                                        id="wardNumber"
+                                        type="text"
+                                        className={`block w-full px-4 py-3 rounded-xl bg-yellow-500/10 border ${errors.wardNumber ? 'border-red-400/50' : 'border-yellow-500/30'} text-white placeholder-yellow-200/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-transparent focus:bg-black/30 transition-all duration-200 backdrop-blur-sm`}
+                                        placeholder="e.g. 12"
+                                        {...register("wardNumber")}
                                     />
-                                    {errors.adminCode && <p className="mt-1 text-xs text-red-300 ml-1">{errors.adminCode.message}</p>}
+                                    {errors.wardNumber && <p className="mt-1 text-xs text-red-300 ml-1">{errors.wardNumber.message}</p>}
+                                </div>
+                            )}
+
+                            {selectedRole === 'city_admin' && (
+                                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                                    <label htmlFor="city" className="block text-sm font-medium text-purple-300 mb-1 ml-1 flex items-center">
+                                        <MapPin className="w-4 h-4 mr-1" /> Assigned City
+                                    </label>
+                                    <select
+                                        id="city"
+                                        className="block w-full px-4 py-3 rounded-xl bg-purple-500/10 border border-purple-500/30 text-white focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent focus:bg-black/30 transition-all duration-200 backdrop-blur-sm appearance-none"
+                                        {...register("city")}
+                                    >
+                                        <option value="" className="text-gray-500">Select City</option>
+                                        {CITIES.map(city => (
+                                            <option key={city} value={city} className="text-gray-900">{city}</option>
+                                        ))}
+                                    </select>
+                                    {errors.city && <p className="mt-1 text-xs text-red-300 ml-1">{errors.city.message}</p>}
                                 </div>
                             )}
 

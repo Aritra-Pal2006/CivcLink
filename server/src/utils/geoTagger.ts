@@ -88,12 +88,12 @@ export const loadGeoJSON = () => {
         }
         const rawData = fs.readFileSync(filePath, 'utf-8');
         const geojson = JSON.parse(rawData);
-        
+
         features = geojson.features.map((f: any) => ({
             ...f,
             bbox: calculateBBox(f.geometry)
         }));
-        
+
         isLoaded = true;
         console.log(`✅ GeoJSON loaded: ${features.length} districts mapped.`);
     } catch (error) {
@@ -129,4 +129,61 @@ export const lookupAdminArea = (lat: number, lng: number): AdminArea => {
     }
 
     return result;
+};
+
+export const getWardGrid = (minLat: number, minLng: number, maxLat: number, maxLng: number) => {
+    const features = [];
+    const step = 0.01; // Grid size increased for performance (approx 1km)
+
+    // Snap to grid
+    const startLat = Math.floor(minLat * 1000) / 1000;
+    const startLng = Math.floor(minLng * 1000) / 1000;
+    const endLat = Math.ceil(maxLat * 1000) / 1000;
+    const endLng = Math.ceil(maxLng * 1000) / 1000;
+
+    for (let lat = startLat; lat < endLat; lat += step) {
+        for (let lng = startLng; lng < endLng; lng += step) {
+            // Replicate the EXACT hash logic from complaintController
+            // const hash = Math.abs(Math.floor(location.lat * 1000) + Math.floor(location.lng * 1000));
+            // const wardNum = (hash % 10) + 1;
+
+            // Note: Floating point math can be tricky, so we use the integer indices
+            const latIdx = Math.round(lat * 1000);
+            const lngIdx = Math.round(lng * 1000);
+            const hash = Math.abs(latIdx + lngIdx);
+            const wardNum = (hash % 10) + 1;
+
+            features.push({
+                type: "Feature",
+                properties: {
+                    wardCode: `WARD_${wardNum}`,
+                    wardNumber: wardNum,
+                    fill: getWardColor(wardNum)
+                },
+                geometry: {
+                    type: "Polygon",
+                    coordinates: [[
+                        [lng, lat],
+                        [lng + step, lat],
+                        [lng + step, lat + step],
+                        [lng, lat + step],
+                        [lng, lat]
+                    ]]
+                }
+            });
+        }
+    }
+
+    return {
+        type: "FeatureCollection",
+        features
+    };
+};
+
+const getWardColor = (n: number) => {
+    const colors = [
+        "#FF0000", "#FF7F00", "#FFFF00", "#7FFF00", "#00FF00",
+        "#00FF7F", "#00FFFF", "#007FFF", "#0000FF", "#7F00FF"
+    ];
+    return colors[(n - 1) % colors.length];
 };

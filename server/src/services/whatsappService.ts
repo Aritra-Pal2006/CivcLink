@@ -1,4 +1,5 @@
 import twilio from 'twilio';
+import i18n from '../config/i18n';
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -33,4 +34,9 @@ export const sendWhatsAppMessage = async (toPhone: string, message: string) => {
     } catch (error) {
         console.error("❌ Error sending WhatsApp message:", error);
     }
+};
+
+export const sendLocalizedWhatsAppMessage = async (toPhone: string, templateKey: string, data: any, locale: string = 'en') => {
+    const message = i18n.t(templateKey, { ...data, lng: locale }) as string;
+    await sendWhatsAppMessage(toPhone, message);
 };

@@ -3,20 +3,21 @@ import {
     createComplaint,
     updateComplaint,
     resolveComplaint,
-    verifyComplaint,
     reopenComplaint,
+    rejectComplaint,
     getComplaintTimeline,
     getComplaints,
-    voteDispute,
-    uploadCitizenProof,
-    voteResolution,
-    getPublicStats
+    getPublicStats,
+    getEscalatedComplaints,
+    getPublicFeed,
+    getAdminStats
 } from '../controllers/complaintController';
 
 const router = Router();
 
-// Public Stats (Must be before /:id routes if any generic ones existed, though here it's fine)
+// Public Stats
 router.get('/public/stats', getPublicStats);
+router.get('/public/feed', getPublicFeed);
 
 // Create a new complaint
 router.post('/', createComplaint);
@@ -24,28 +25,37 @@ router.post('/', createComplaint);
 // Get complaints with filters
 router.get('/', getComplaints);
 
-// Update complaint details
+// Get Admin Stats (Counts)
+router.get('/admin/stats', getAdminStats);
+
+// Get escalated complaints (City Admin)
+router.get('/escalated', getEscalatedComplaints);
+
+// Update complaint details (Admin: submitted -> in_progress)
 router.put('/:id', updateComplaint);
 
-// Resolve complaint (Official)
+// Resolve complaint (Admin: in_progress -> resolved)
 router.put('/:id/resolve', resolveComplaint);
 
-// Verify complaint (Citizen)
-router.put('/:id/verify', verifyComplaint);
-
-// Reopen complaint (Citizen)
+// Reopen complaint (Citizen: resolved -> reopened)
 router.put('/:id/reopen', reopenComplaint);
 
-// Vote Dispute (Watchdog)
-router.post('/:id/vote-dispute', voteDispute);
-
-// Upload Citizen Proof
-router.put('/:id/citizen-proof', uploadCitizenProof);
-
-// Vote on Resolution (Community Evidence)
-router.post('/:id/vote-resolution', voteResolution);
+// Reject complaint (Admin: submitted/in_progress -> rejected)
+router.put('/:id/reject', rejectComplaint);
 
 // Get complaint timeline
 router.get('/:id/timeline', getComplaintTimeline);
+
+import multer from 'multer';
+import { transcribeAudio, transcribeComplaint } from '../controllers/complaintController';
+import { verifyToken } from '../middleware/auth';
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+// Transcribe uploaded audio (for Voice Input)
+router.post('/transcribe-audio', verifyToken, upload.single('audio'), transcribeAudio);
+
+// Transcribe existing complaint audio (Admin)
+router.post('/:id/transcribe', verifyToken, transcribeComplaint);
 
 export default router;

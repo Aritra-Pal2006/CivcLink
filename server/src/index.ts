@@ -13,22 +13,39 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // Required for Twilio Webhooks
 
 // Initialize Firebase Admin
+// Initialize Firebase Admin
 const serviceAccountPath = process.env.FIREBASE_ADMIN_SDK_PATH;
-if (serviceAccountPath) {
+const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+
+if (serviceAccountJson) {
+    try {
+        const serviceAccount = JSON.parse(serviceAccountJson);
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount)
+        });
+        console.log("✅ Firebase Admin initialized from ENV");
+    } catch (error) {
+        console.error("❌ Failed to parse FIREBASE_SERVICE_ACCOUNT:", error);
+    }
+} else if (serviceAccountPath) {
     try {
         const serviceAccount = require(path.resolve(__dirname, '..', serviceAccountPath));
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount)
         });
-        console.log("✅ Firebase Admin initialized");
+        console.log("✅ Firebase Admin initialized from FILE");
     } catch (error) {
         console.error("❌ Failed to load Firebase Admin SDK key:", error);
     }
 } else {
-    console.warn("⚠️ FIREBASE_ADMIN_SDK_PATH not set. Auth verification will fail.");
+    console.warn("⚠️ FIREBASE_ADMIN_SDK_PATH or FIREBASE_SERVICE_ACCOUNT not set. Auth verification will fail.");
 }
 
 // Import Routes
+import { handleMockIvrWebhook } from './controllers/mockIvrController';
+console.log("Registering /api/mock-ivr/webhook route...");
+app.post('/api/mock-ivr/webhook', handleMockIvrWebhook);
+
 import aiRoutes from './routes/ai';
 import geocodeRoutes from './routes/geocode';
 import emailRoutes from './routes/email';
@@ -39,12 +56,35 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/geocode', geocodeRoutes);
 app.use('/api/email', emailRoutes);
 app.use('/api/complaints', complaintRoutes);
+import userRoutes from './routes/user';
+app.use('/api/users', userRoutes);
 import uploadRoutes from './routes/upload';
 console.log("Registering /api/upload route...");
 app.use('/api/upload', uploadRoutes);
 
+
 import whatsappRoutes from './routes/whatsapp';
 app.use('/api/webhooks/whatsapp', whatsappRoutes);
+
+import { runEscalationJob } from './cron/escalationJob';
+
+// Vercel Cron Endpoint
+app.get('/api/cron/escalate', async (req, res) => {
+    // Basic security check: Vercel sends this header
+    // You can also add a secret key check if needed
+    console.log("⏳ Triggering Escalation Job via Cron...");
+    await runEscalationJob();
+    res.status(200).json({ success: true, message: 'Escalation job triggered' });
+});
+
+// Run Escalation Job every hour (Local Development Only)
+if (process.env.NODE_ENV !== 'production') {
+    setInterval(() => {
+        runEscalationJob();
+    }, 60 * 60 * 1000);
+    // Run once on startup to catch up
+    runEscalationJob();
+}
 
 // Health Check
 app.get('/', (req, res) => {
@@ -52,6 +92,12 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.SERVER_PORT || 5000;
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
+
+// Only listen if not running in Vercel (Vercel exports the app)
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`🚀 Server running on http://localhost:${PORT}`);
+    });
+}
+
+export default app;

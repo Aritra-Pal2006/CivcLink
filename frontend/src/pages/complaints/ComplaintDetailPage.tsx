@@ -4,13 +4,14 @@ import {
     updateComplaint,
     addComplaintNote,
     getComplaintNotes,
-    voteDispute,
-    uploadCitizenProof,
-    voteResolution,
+    resolveComplaint,
     reopenComplaint,
+    rejectComplaint,
+    transcribeComplaint,
     type Complaint,
     type ComplaintNote
 } from '../../services/complaintService';
+
 import { Timestamp } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
@@ -18,7 +19,7 @@ import { Icon } from 'leaflet';
 import markerIconPng from "leaflet/dist/images/marker-icon.png";
 import markerShadowPng from "leaflet/dist/images/marker-shadow.png";
 import { format } from 'date-fns';
-import { ArrowLeft, Send, User, CheckCircle, Loader2, AlertTriangle, ThumbsUp, ThumbsDown, Camera } from 'lucide-react';
+import { ArrowLeft, Send, User, CheckCircle, Loader2, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 import ComplaintTimeline from '../../components/ComplaintTimeline';
 
@@ -37,10 +38,8 @@ export const ComplaintDetailPage: React.FC = () => {
     const [newNote, setNewNote] = useState('');
     const [loading, setLoading] = useState(true);
     const [sendingNote, setSendingNote] = useState(false);
-    const [citizenProofFile, setCitizenProofFile] = useState<File | null>(null);
-    const [uploadingProof, setUploadingProof] = useState(false);
 
-    const isOfficial = userProfile?.role === 'official' || userProfile?.role === 'superadmin';
+    const isAdmin = userProfile?.role === 'admin';
 
     useEffect(() => {
         let unsubscribe: () => void;
@@ -48,11 +47,9 @@ export const ComplaintDetailPage: React.FC = () => {
         const fetchData = async () => {
             if (id) {
                 try {
-                    // Initial fetch for notes (still one-time for now, or could be real-time too)
                     const notesData = await getComplaintNotes(id);
                     setNotes(notesData);
 
-                    // Real-time subscription for complaint details
                     const { subscribeToComplaint } = await import('../../services/complaintService');
                     unsubscribe = subscribeToComplaint(id, (updatedComplaint) => {
                         setComplaint(updatedComplaint);
@@ -76,6 +73,14 @@ export const ComplaintDetailPage: React.FC = () => {
     const [resolveNote, setResolveNote] = useState('');
     const [resolving, setResolving] = useState(false);
 
+    const [showRejectModal, setShowRejectModal] = useState(false);
+    const [rejectReason, setRejectReason] = useState('');
+    const [rejecting, setRejecting] = useState(false);
+
+    const [transcribing, setTranscribing] = useState(false);
+
+
+
     const handleStatusChange = async (newStatus: string) => {
         if (!complaint || !id) return;
 
@@ -84,8 +89,14 @@ export const ComplaintDetailPage: React.FC = () => {
             return;
         }
 
+        if (newStatus === 'rejected') {
+            setShowRejectModal(true);
+            return;
+        }
+
         try {
             await updateComplaint(id, { status: newStatus as any });
+            // Optimistic update
             setComplaint({ ...complaint, status: newStatus as any });
         } catch (error) {
             alert("Failed to update status");
@@ -98,6 +109,20 @@ export const ComplaintDetailPage: React.FC = () => {
 
         setResolving(true);
         try {
+            // Capture Admin Location
+            let adminLocation = null;
+            try {
+                const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+                });
+                adminLocation = {
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude
+                };
+            } catch (geoError) {
+                console.warn("Could not get admin location", geoError);
+            }
+
             const { uploadComplaintAttachment } = await import('../../services/complaintService');
             const result = await uploadComplaintAttachment(resolveProofFile);
 
@@ -108,71 +133,74 @@ export const ComplaintDetailPage: React.FC = () => {
                 uploadedAt: Timestamp.now()
             };
 
-            // Calculate deadline: Now + 48 hours
-            const deadline = new Date();
-            deadline.setHours(deadline.getHours() + 48);
+            // Call resolve endpoint
+            await resolveComplaint(id, proofData, adminLocation);
 
-            await updateComplaint(id, {
-                status: 'pending_verification',
-                resolutionProof: proofData,
-                verificationDeadline: Timestamp.fromDate(deadline)
-            });
-
-            setComplaint({
-                ...complaint,
-                status: 'pending_verification',
-                resolutionProof: proofData,
-                verificationDeadline: Timestamp.fromDate(deadline)
-            });
             setShowResolveModal(false);
-        } catch (error) {
+            // Status update will come via subscription
+        } catch (error: any) {
             console.error("Failed to resolve", error);
-            alert("Failed to submit resolution proof");
+            // Show specific error (e.g., GPS mismatch)
+            alert(error.message || "Failed to submit resolution proof");
         } finally {
             setResolving(false);
         }
     };
 
-    const handleCitizenAction = async (action: 'verify' | 'reopen') => {
-        if (!complaint || !id) return;
+    const handleRejectSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!complaint || !id || !userProfile || !rejectReason) return;
+
+        setRejecting(true);
+        try {
+            await rejectComplaint(id, userProfile.uid, rejectReason);
+            setShowRejectModal(false);
+            setRejectReason('');
+        } catch (error) {
+            console.error("Failed to reject", error);
+            alert("Failed to reject complaint");
+        } finally {
+            setRejecting(false);
+        }
+    };
+
+    const handleReopen = async () => {
+        if (!complaint || !id || !userProfile) return;
+
+        const reason = prompt("Please provide a reason for reopening this complaint:");
+        if (!reason) return;
 
         try {
-            if (action === 'verify') {
-                await updateComplaint(id, { status: 'resolved' });
-                setComplaint({ ...complaint, status: 'resolved' });
-            } else {
-                if (!userProfile) {
-                    alert("You must be logged in to reopen a complaint.");
-                    return;
-                }
-                const reason = prompt("Please provide a reason for reopening this complaint:");
-                if (!reason) return; // Cancelled
+            await reopenComplaint(id, userProfile.uid, reason);
+        } catch (error) {
+            alert("Failed to reopen complaint");
+        }
+    };
 
-                await reopenComplaint(id, userProfile.uid, reason); // Use the service function
-                // await updateComplaint(id, {
-                //     status: 'reopened',
-                //     timesReopened: (complaint.timesReopened || 0) + 1
-                // });
-                setComplaint({
-                    ...complaint,
-                    status: 'reopened',
-                    timesReopened: (complaint.timesReopened || 0) + 1
-                });
+
+    const handleTranscribe = async () => {
+        if (!complaint || !id) return;
+        setTranscribing(true);
+        try {
+            const res = await transcribeComplaint(id);
+            // Optimistic update or wait for subscription
+            if (res.transcript) {
+                setComplaint(prev => prev ? ({
+                    ...prev,
+                    transcript: res.transcript,
+                    transcriptionStatus: 'completed'
+                }) : null);
+            } else {
+                // Trigger reload or wait for subscription
             }
         } catch (error) {
-            alert("Failed to update status");
+            console.error("Transcription failed", error);
+            alert("Transcription failed");
+        } finally {
+            setTranscribing(false);
         }
     };
 
-    const handleAssignmentChange = async (assignee: string) => {
-        if (!complaint || !id) return;
-        try {
-            await updateComplaint(id, { assignedTo: assignee });
-            setComplaint({ ...complaint, assignedTo: assignee });
-        } catch (error) {
-            alert("Failed to assign");
-        }
-    };
 
     const handleAddNote = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -189,8 +217,6 @@ export const ComplaintDetailPage: React.FC = () => {
             };
 
             await addComplaintNote(id, noteData);
-
-            // Refresh notes
             const updatedNotes = await getComplaintNotes(id);
             setNotes(updatedNotes);
             setNewNote('');
@@ -199,40 +225,6 @@ export const ComplaintDetailPage: React.FC = () => {
             alert("Failed to add note");
         } finally {
             setSendingNote(false);
-        }
-    };
-
-    const handleVoteDispute = async () => {
-        if (!id || !userProfile) return;
-        try {
-            await voteDispute(id, userProfile.uid);
-            alert("Dispute vote recorded. Thank you for your vigilance.");
-        } catch (error) {
-            alert("Failed to record vote");
-        }
-    };
-
-    const handleUploadCitizenProof = async () => {
-        if (!id || !userProfile || !citizenProofFile) return;
-        setUploadingProof(true);
-        try {
-            await uploadCitizenProof(id, userProfile.uid, citizenProofFile);
-            setCitizenProofFile(null);
-            alert("Proof uploaded successfully");
-        } catch (error) {
-            alert("Failed to upload proof");
-        } finally {
-            setUploadingProof(false);
-        }
-    };
-
-    const handleVoteResolution = async (vote: 'looks_fixed' | 'not_fixed') => {
-        if (!id || !userProfile) return;
-        try {
-            await voteResolution(id, userProfile.uid, vote);
-            alert("Vote recorded");
-        } catch (error) {
-            alert("Failed to record vote");
         }
     };
 
@@ -247,49 +239,12 @@ export const ComplaintDetailPage: React.FC = () => {
                 <ArrowLeft className="mr-2 h-4 w-4" /> Back to Complaints
             </Link>
 
-            {/* Citizen Verification Banner */}
-            {isOwner && complaint.status === 'pending_verification' && (
-                <div className="bg-yellow-500/20 border-l-4 border-yellow-400 p-4 shadow-lg rounded-r-md backdrop-blur-sm">
-                    <div className="flex justify-between items-center">
-                        <div className="flex">
-                            <div className="flex-shrink-0">
-                                <CheckCircle className="h-5 w-5 text-yellow-400" aria-hidden="true" />
-                            </div>
-                            <div className="ml-3">
-                                <p className="text-sm text-yellow-100">
-                                    The official has marked this as resolved. Please verify.
-                                    {complaint.verificationDeadline && (
-                                        <span className="block text-xs mt-1 text-yellow-200">
-                                            Auto-resolution in: {complaint.verificationDeadline?.toDate ? format(complaint.verificationDeadline.toDate(), 'PP p') : 'Soon'}
-                                        </span>
-                                    )}
-                                </p>
-                            </div>
-                        </div>
-                        <div className="flex space-x-3">
-                            <button
-                                onClick={() => handleCitizenAction('verify')}
-                                className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 shadow-sm"
-                            >
-                                Yes, Resolved
-                            </button>
-                            <button
-                                onClick={() => handleCitizenAction('reopen')}
-                                className="inline-flex items-center px-3 py-2 border border-white/30 text-sm leading-4 font-medium rounded-md text-white bg-white/10 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                            >
-                                No, Reopen
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Reopen Button for Resolved Complaints */}
+            {/* Reopen Button for Resolved Complaints (Citizen) */}
             {isOwner && complaint.status === 'resolved' && (
                 <div className="bg-white/10 backdrop-blur-md p-4 rounded-md border border-white/20 flex justify-between items-center shadow-lg">
                     <span className="text-sm text-primary-100">Issue persists? You can request to reopen this complaint.</span>
                     <button
-                        onClick={() => handleCitizenAction('reopen')}
+                        onClick={handleReopen}
                         className="inline-flex items-center px-3 py-2 border border-white/30 text-sm leading-4 font-medium rounded-md text-white bg-white/10 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                     >
                         Not Resolved? Request Reopen
@@ -306,48 +261,11 @@ export const ComplaintDetailPage: React.FC = () => {
                         </div>
                         <div className="ml-3">
                             <p className="text-sm text-red-100">
-                                Dispute Submitted. This complaint has been reopened for further review.
-                                {complaint.timesReopened && complaint.timesReopened > 1 && (
+                                This complaint has been reopened for further review.
+                                {complaint.timesReopened && complaint.timesReopened > 0 && (
                                     <span className="font-bold ml-1">(Reopened {complaint.timesReopened} times)</span>
                                 )}
                             </p>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Flagged Badge (Watchdog) */}
-            {complaint.status === 'flagged' && (
-                <div className="bg-red-500/20 border-l-4 border-red-500 p-4 backdrop-blur-sm rounded-r-md">
-                    <div className="flex">
-                        <div className="flex-shrink-0">
-                            <AlertTriangle className="h-5 w-5 text-red-500" aria-hidden="true" />
-                        </div>
-                        <div className="ml-3">
-                            <h3 className="text-sm font-medium text-red-200">Flagged for Review</h3>
-                            <div className="mt-2 text-sm text-red-100">
-                                <p>This complaint has been flagged by the community due to multiple disputes. A Superadmin will review it shortly.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Fraud Alert (AI) */}
-            {(complaint as any).possibleFraud && (
-                <div className="bg-orange-500/20 border-l-4 border-orange-400 p-4 backdrop-blur-sm rounded-r-md">
-                    <div className="flex">
-                        <div className="flex-shrink-0">
-                            <AlertTriangle className="h-5 w-5 text-orange-400" aria-hidden="true" />
-                        </div>
-                        <div className="ml-3">
-                            <h3 className="text-sm font-medium text-orange-200">Potential Mismatch Detected</h3>
-                            <div className="mt-2 text-sm text-orange-100">
-                                <p>Our AI system detected a potential mismatch in the resolution proof. Please review carefully.</p>
-                                {(complaint as any).fraudReason && (
-                                    <p className="mt-1 text-xs italic">Reason: {(complaint as any).fraudReason}</p>
-                                )}
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -360,30 +278,30 @@ export const ComplaintDetailPage: React.FC = () => {
                         <p className="mt-1 max-w-2xl text-sm text-primary-200">Filed on {complaint.createdAt?.toDate ? format(complaint.createdAt.toDate(), 'PPpp') : 'N/A'}</p>
                     </div>
                     <div className="flex space-x-2 items-center">
-                        {complaint.targetResolutionDate && (
-                            <span className={clsx("px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full",
-                                new Date() > complaint.targetResolutionDate.toDate() && complaint.status !== 'resolved' ? 'bg-red-500/20 text-red-100 border border-red-500/30' : 'bg-blue-500/20 text-blue-100 border border-blue-500/30')}>
-                                Due: {complaint.targetResolutionDate?.toDate ? format(complaint.targetResolutionDate.toDate(), 'MMM d') : 'N/A'}
-                            </span>
-                        )}
                         <span className={clsx("px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full capitalize",
                             complaint.status === 'resolved' ? 'bg-green-500/20 text-green-100 border border-green-500/30' :
                                 complaint.status === 'reopened' ? 'bg-red-500/20 text-red-100 border border-red-500/30' :
-                                    complaint.status === 'pending_verification' ? 'bg-yellow-500/20 text-yellow-100 border border-yellow-500/30' :
-                                        complaint.status === 'flagged' ? 'bg-red-500/20 text-red-100 border border-red-500/30' :
+                                    complaint.status === 'in_progress' ? 'bg-blue-500/20 text-blue-100 border border-blue-500/30' :
+                                        complaint.status === 'rejected' ? 'bg-red-900/50 text-red-100 border border-red-500/50' :
                                             'bg-yellow-500/20 text-yellow-100 border border-yellow-500/30')}>
                             {complaint.status.replace('_', ' ')}
                         </span>
-                        {isOfficial && (
+                        {complaint.isOverdue && (
+                            <span className="px-3 py-1 inline-flex text-sm leading-5 font-bold rounded-full bg-red-600 text-white animate-pulse border border-red-700 shadow-sm">
+                                OVERDUE
+                            </span>
+                        )}
+
+                        {/* Admin Status Controls */}
+                        {isAdmin && (
                             <select
                                 value={complaint.status}
                                 onChange={(e) => handleStatusChange(e.target.value)}
                                 className="ml-2 block pl-3 pr-10 py-1 text-base bg-white/10 border-white/20 text-white focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md"
                             >
                                 <option value="submitted" className="text-gray-900">Submitted</option>
-                                <option value="in_review" className="text-gray-900">In Review</option>
                                 <option value="in_progress" className="text-gray-900">In Progress</option>
-                                <option value="resolved" className="text-gray-900">Resolved (Start Verification)</option>
+                                <option value="resolved" className="text-gray-900">Resolved</option>
                                 <option value="rejected" className="text-gray-900">Rejected</option>
                             </select>
                         )}
@@ -413,6 +331,19 @@ export const ComplaintDetailPage: React.FC = () => {
                             </div>
                         )}
 
+                        {isAdmin && (
+                            <div className="sm:col-span-1">
+                                <dt className="text-sm font-medium text-primary-200">Reporter</dt>
+                                <dd className="mt-1 text-sm text-white">
+                                    {complaint.isAnonymous ? (
+                                        <span className="italic text-gray-400">Anonymous ({complaint.anonymousDisplayId || 'Hidden'})</span>
+                                    ) : (
+                                        <span>User: {complaint.userId}</span>
+                                    )}
+                                </dd>
+                            </div>
+                        )}
+
                         <div className="sm:col-span-1">
                             <dt className="text-sm font-medium text-primary-200">Category</dt>
                             <dd className="mt-1 text-sm text-white">
@@ -431,21 +362,6 @@ export const ComplaintDetailPage: React.FC = () => {
                             <dd className="mt-1 text-sm text-white capitalize">{complaint.priority}</dd>
                         </div>
 
-                        {isOfficial && (
-                            <div className="sm:col-span-1">
-                                <dt className="text-sm font-medium text-primary-200">Assigned To</dt>
-                                <dd className="mt-1 text-sm text-white">
-                                    <input
-                                        type="text"
-                                        placeholder="Official ID/Name"
-                                        value={complaint.assignedTo || ''}
-                                        onChange={(e) => handleAssignmentChange(e.target.value)}
-                                        className="shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm bg-white/10 border-white/20 rounded-md text-white placeholder-white/40"
-                                    />
-                                </dd>
-                            </div>
-                        )}
-
                         <div className="sm:col-span-2">
                             <dt className="text-sm font-medium text-primary-200">Description</dt>
                             <dd className="mt-1 text-sm text-white whitespace-pre-wrap">{complaint.description}</dd>
@@ -457,11 +373,64 @@ export const ComplaintDetailPage: React.FC = () => {
                             </div>
                         )}
 
-                        {/* Proof of Resolution Display & Community Evidence */}
-                        {(complaint.resolutionProof || (complaint as any).citizen_proof_url) && (
+
+                        {/* Transcription Section */}
+                        {(complaint.recordingUrl || (complaint.attachments && complaint.attachments.some(a => a.type === 'audio' || a.name.match(/\.(mp3|wav|m4a|ogg)$/i)))) && (
+                            <div className="sm:col-span-2 bg-blue-900/20 border border-blue-500/30 p-4 rounded-md">
+                                <div className="flex justify-between items-start mb-2">
+                                    <dt className="text-sm font-medium text-blue-200 flex items-center gap-2">
+                                        <div className="h-2 w-2 rounded-full bg-blue-400 animate-pulse"></div>
+                                        Audio Transcription
+                                    </dt>
+                                    {isAdmin && (!complaint.transcriptionStatus || complaint.transcriptionStatus === 'not_requested' || complaint.transcriptionStatus === 'failed') && (
+                                        <button
+                                            onClick={handleTranscribe}
+                                            disabled={transcribing}
+                                            className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded transition-colors disabled:opacity-50"
+                                        >
+                                            {transcribing ? 'Transcribing...' : 'Request Transcription'}
+                                        </button>
+                                    )}
+                                </div>
+
+                                {complaint.transcriptionStatus === 'pending' && (
+                                    <div className="flex items-center text-blue-300 text-sm py-2">
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        Transcription in progress...
+                                    </div>
+                                )}
+
+                                {complaint.transcriptionStatus === 'completed' && complaint.transcript && (
+                                    <dd className="mt-1 text-sm text-blue-100 italic border-l-2 border-blue-500 pl-3">
+                                        "{complaint.transcript}"
+                                    </dd>
+                                )}
+
+                                {complaint.transcriptionStatus === 'failed' && (
+                                    <div className="text-red-400 text-sm mt-1">
+                                        Transcription failed. Please try again.
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+
+                        {complaint.status === 'rejected' && (
+                            <div className="sm:col-span-2 bg-red-900/40 border border-red-500/50 p-4 rounded-md">
+                                <dt className="text-sm font-bold text-red-200 flex items-center">
+                                    <AlertTriangle className="h-5 w-5 mr-2" />
+                                    Complaint Rejected
+                                </dt>
+                                <dd className="mt-2 text-sm text-red-100">
+                                    Reason: <span className="font-medium">{complaint.rejectionReason || 'No reason provided'}</span>
+                                </dd>
+                            </div>
+                        )}
+
+                        {/* Proof of Resolution Display */}
+                        {complaint.resolutionProof && (
                             <div className="sm:col-span-2 space-y-4">
-                                <dt className="text-sm font-medium text-primary-200 mb-2">Evidence Comparison</dt>
-                                {/* Side-by-Side Comparison */}
+                                <dt className="text-sm font-medium text-primary-200 mb-2">Resolution Proof</dt>
                                 <div className="col-span-1 sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {/* Original Image */}
                                     <div className="bg-white/5 p-4 rounded-md border border-white/10">
@@ -479,110 +448,23 @@ export const ComplaintDetailPage: React.FC = () => {
                                     <div className="bg-green-500/10 p-4 rounded-md border border-green-500/30 relative">
                                         <h4 className="text-sm font-medium text-green-200 mb-2 flex items-center justify-between">
                                             <span className="flex items-center"><CheckCircle className="h-4 w-4 mr-1" /> Resolution Proof</span>
-                                            {/* AI Verdict Badge */}
-                                            {complaint.verification && complaint.verification.aiVerdict && (
-                                                <span className={clsx("px-2 py-0.5 text-xs rounded-full border",
-                                                    complaint.verification.aiVerdict === 'LIKELY_MATCH' ? "bg-green-500/20 text-green-100 border-green-500/50" :
-                                                        complaint.verification.aiVerdict === 'LIKELY_FAKE' ? "bg-red-500/20 text-red-100 border-red-500/50" :
-                                                            "bg-yellow-500/20 text-yellow-100 border-yellow-500/50"
-                                                )}>
-                                                    AI: {complaint.verification.aiVerdict?.replace('_', ' ') || 'Unknown'}
-                                                </span>
-                                            )}
-                                        </h4>
-                                        {complaint.resolutionProof ? (
-                                            <div className="flex flex-col space-y-2">
-                                                <a href={complaint.resolutionProof.webViewLink} target="_blank" rel="noopener noreferrer" className="block">
-                                                    <img src={complaint.resolutionProof.thumbnailLink || complaint.resolutionProof.webViewLink} alt="Resolution" className="w-full h-48 object-cover rounded-md border border-green-500/30" />
-                                                </a>
-                                                {complaint.resolutionProof.description && (
-                                                    <p className="text-green-100 italic text-sm">"{complaint.resolutionProof.description}"</p>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            <div className="w-full h-48 bg-white/5 rounded-md flex items-center justify-center text-white/30 text-sm">No Proof Yet</div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* AI Reason Display */}
-                                {complaint.verification && complaint.verification.aiReason && (
-                                    <div className="col-span-1 sm:col-span-2 bg-white/5 p-3 rounded-md border border-white/10 text-xs text-primary-200">
-                                        <span className="font-semibold text-primary-100">AI Analysis:</span> {complaint.verification.aiReason}
-                                    </div>
-                                )}
-
-                                {/* Citizen Counter-Proof (Existing) */}
-                                {(complaint as any).citizen_proof_url && (
-                                    <div className="col-span-1 sm:col-span-2 bg-blue-500/10 p-4 rounded-md border border-blue-500/30 backdrop-blur-sm">
-                                        <h4 className="text-sm font-medium text-blue-200 mb-2 flex items-center">
-                                            <User className="h-4 w-4 mr-1" /> Citizen Counter-Proof
                                         </h4>
                                         <div className="flex flex-col space-y-2">
-                                            <a href={(complaint as any).citizen_proof_url} target="_blank" rel="noopener noreferrer" className="block">
-                                                <img src={(complaint as any).citizen_proof_url} alt="Citizen Proof" className="w-full h-48 object-cover rounded-md border border-blue-500/30" />
+                                            <a href={complaint.resolutionProof.webViewLink} target="_blank" rel="noopener noreferrer" className="block">
+                                                <img src={complaint.resolutionProof.thumbnailLink || complaint.resolutionProof.webViewLink} alt="Resolution" className="w-full h-48 object-cover rounded-md border border-green-500/30" />
                                             </a>
-                                            <p className="text-xs text-blue-100">Uploaded by community member</p>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Upload UI for Citizen (Existing) */}
-                                {(!isOfficial && (complaint.status === 'pending_verification' || complaint.status === 'resolved') && !(complaint as any).citizen_proof_url) && (
-                                    <div className="col-span-1 sm:col-span-2 bg-white/5 p-4 rounded-md border border-white/20 flex flex-col justify-center items-center text-center hover:bg-white/10 transition-colors">
-                                        <Camera className="h-8 w-8 text-primary-300 mb-2" />
-                                        <p className="text-sm text-primary-100 mb-2">Have proof it's NOT fixed?</p>
-                                        <div className="flex items-center space-x-2">
-                                            <input
-                                                type="file"
-                                                onChange={(e) => setCitizenProofFile(e.target.files?.[0] || null)}
-                                                className="text-xs text-primary-200 file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary-500/20 file:text-primary-100 hover:file:bg-primary-500/30"
-                                            />
-                                            {citizenProofFile && (
-                                                <button
-                                                    onClick={handleUploadCitizenProof}
-                                                    disabled={uploadingProof}
-                                                    className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50"
-                                                >
-                                                    {uploadingProof ? '...' : 'Upload'}
-                                                </button>
+                                            {complaint.resolutionProof.description && (
+                                                <p className="text-green-100 italic text-sm">"{complaint.resolutionProof.description}"</p>
+                                            )}
+                                            {complaint.resolutionProof.proofLocationMismatch && (
+                                                <div className="mt-2 bg-red-500/20 border border-red-500/50 p-2 rounded text-red-100 text-xs flex items-start">
+                                                    <span className="font-bold mr-1">⚠ Warning:</span>
+                                                    Proof uploaded {complaint.resolutionProof.proofLocationDistance}m away from complaint location.
+                                                </div>
                                             )}
                                         </div>
                                     </div>
-                                )}
-
-                                {/* Community Voting & Watchdog Actions */}
-                                {(!isOfficial && (complaint.status === 'pending_verification' || complaint.status === 'resolved')) && (
-                                    <div className="mt-4 flex justify-between items-center bg-white/5 p-3 rounded-md border border-white/10">
-                                        <div className="text-sm text-primary-100">
-                                            Community Verdict:
-                                        </div>
-                                        <div className="flex space-x-3">
-                                            <button
-                                                onClick={() => handleVoteResolution('looks_fixed')}
-                                                className="flex items-center space-x-1 px-3 py-1 bg-white/10 border border-white/20 rounded-full text-sm hover:bg-green-500/20 text-green-300 transition-colors"
-                                            >
-                                                <ThumbsUp className="h-4 w-4" />
-                                                <span>Looks Fixed</span>
-                                            </button>
-                                            <button
-                                                onClick={() => handleVoteResolution('not_fixed')}
-                                                className="flex items-center space-x-1 px-3 py-1 bg-white/10 border border-white/20 rounded-full text-sm hover:bg-red-500/20 text-red-300 transition-colors"
-                                            >
-                                                <ThumbsDown className="h-4 w-4" />
-                                                <span>Not Fixed</span>
-                                            </button>
-                                            <button
-                                                onClick={handleVoteDispute}
-                                                className="flex items-center space-x-1 px-3 py-1 bg-red-500/10 border border-red-500/30 rounded-full text-sm hover:bg-red-500/20 text-red-300 ml-4 transition-colors"
-                                                title="Flag this complaint if resolution is fake"
-                                            >
-                                                <AlertTriangle className="h-4 w-4" />
-                                                <span>Dispute / Flag</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
+                                </div>
                             </div>
                         )}
 
@@ -592,16 +474,10 @@ export const ComplaintDetailPage: React.FC = () => {
                                 {complaint.location ? (
                                     <>
                                         <p className="mb-2">{complaint.location.address}</p>
-                                        {(complaint.location.stateName || complaint.location.districtName) && (
-                                            <div className="mb-2 flex items-center space-x-2 text-xs text-primary-300">
-                                                <span className="bg-white/10 px-2 py-1 rounded-full border border-white/20">
-                                                    {complaint.location.stateName || 'Unknown State'}
-                                                </span>
-                                                <span>•</span>
-                                                <span className="bg-white/10 px-2 py-1 rounded-full border border-white/20">
-                                                    {complaint.location.districtName || 'Unknown District'}
-                                                </span>
-                                            </div>
+                                        {complaint.location.wardCode && (
+                                            <p className="mb-2 text-xs font-semibold text-primary-300 bg-white/5 inline-block px-2 py-1 rounded border border-white/10">
+                                                Ward: {complaint.location.wardCode}
+                                            </p>
                                         )}
                                         <div className="h-64 w-full rounded-md overflow-hidden border border-white/20">
                                             <MapContainer
@@ -731,6 +607,59 @@ export const ComplaintDetailPage: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={() => setShowResolveModal(false)}
+                                        className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:col-start-1 sm:text-sm"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Reject Modal */}
+            {showRejectModal && (
+                <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+                    <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onClick={() => setShowRejectModal(false)}></div>
+                        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+                        <div className="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                            <div>
+                                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+                                    <AlertTriangle className="h-6 w-6 text-red-600" aria-hidden="true" />
+                                </div>
+                                <div className="mt-3 text-center sm:mt-5">
+                                    <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">Reject Complaint</h3>
+                                    <div className="mt-2">
+                                        <p className="text-sm text-gray-500">
+                                            Are you sure you want to reject this complaint? This action cannot be undone easily.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <form onSubmit={handleRejectSubmit} className="mt-5 sm:mt-6 space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Rejection Reason (Required)</label>
+                                    <textarea
+                                        required
+                                        rows={3}
+                                        value={rejectReason}
+                                        onChange={(e) => setRejectReason(e.target.value)}
+                                        className="mt-1 shadow-sm focus:ring-red-500 focus:border-red-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                                        placeholder="Why is this complaint being rejected?"
+                                    />
+                                </div>
+                                <div className="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
+                                    <button
+                                        type="submit"
+                                        disabled={rejecting}
+                                        className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:col-start-2 sm:text-sm disabled:opacity-50"
+                                    >
+                                        {rejecting ? 'Rejecting...' : 'Confirm Rejection'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowRejectModal(false)}
                                         className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:col-start-1 sm:text-sm"
                                     >
                                         Cancel

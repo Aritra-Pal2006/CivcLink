@@ -1,0 +1,77 @@
+{
+    "appTitle": "CivicLink",
+    "dashboard": {
+        "title": "Dashboard",
+        "overview": "Overview"
+    },
+    "kpi": {
+        "total": "Total Complaints",
+        "open": "Open Issues",
+        "overdue": "Overdue",
+        "resolved": "Resolved"
+    },
+    "actions": {
+        "assign": "Assign",
+        "resolve": "Resolve",
+        "reject": "Reject",
+        "view": "View Details"
+    },
+    "filter": {
+        "ward": "Filter by Ward",
+        "status": "Filter by Status",
+        "priority": "Filter by Priority"
+    },
+    "ticket": {
+        "createdMessage": "Complaint created successfully",
+        "id": "Complaint ID",
+        "status": "Status",
+        "priority": "Priority"
+    },
+    "whatsapp": {
+        "ticket_created": "Hello! Your complaint {{id}} regarding {{category}} has been registered. We will update you shortly.",
+        "status_update": "Update: Your complaint {{id}} is now {{status}}."
+    },
+    "notification": {
+        "escalated": "Complaint {{id}} has been escalated due to delay."
+    },
+    "ai": {
+        "confidence": {
+            "high": "High Confidence",
+            "low": "Low Confidence"
+        },
+        "verdict": "AI Verdict"
+    },
+    "map": {
+        "heatToggle": "Toggle Heatmap",
+        "satellite": "Satellite View"
+    },
+    "livefeed": {
+        "newComplaint": "New Complaint Received",
+        "title": "Live Feed"
+    },
+    "common": {
+        "loading": "Loading...",
+        "error": "Error",
+        "save": "Save",
+        "cancel": "Cancel",
+        "logout": "Logout",
+        "language": "Language"
+    },
+    "category": {
+        "Roads": "Roads",
+        "Water": "Water",
+        "Waste": "Waste",
+        "Electricity": "Electricity",
+        "Other": "Other"
+    },
+    "categoryLabel": "Category",
+    "community_feed": "Community Feed",
+    "newComplaint": "New Complaint",
+    "myComplaints": "My Complaints",
+    "settings": "Settings",
+    "admin": {
+        "allComplaints": "All Complaints",
+        "analytics": "Analytics",
+        "escalations": "Escalations"
+    }
+}

@@ -1,0 +1,49 @@
+--- Debugging Data ---
+
+1. City Admins:
+- User: city@gmail.com (JVTJfWaboIUj6MauOQowKohYvnA2)
+  assignedCity: "undefined"
+  adminLevel: city
+- User: citykol@gmail.com (MVBiavNNLePQi4nAsZ894jTs6l52)
+  assignedCity: "Mumbai"
+  adminLevel: city
+- User: temp_admin@civic.com (lutu3jHGTlYO0rwNy4v79ExR3KH3)
+  assignedCity: "undefined"
+  adminLevel: city
+
+2. Recent Complaints (District Check):
+- Complaint qXsledSFGsS3NuOroiJJ:
+  Title: Severe Water Contamination in Block B
+  District: "South24Parganas"
+  City (if any): "undefined"
+  Ward: "WARD_12"
+- Complaint 3VZEECEzwy3CIQFgKCtN:
+  Title: Drain overflow
+  District: "Tonk"
+  City (if any): "undefined"
+  Ward: "WARD_10"
+- Complaint GW40fBD4EHEtCVyykDUs:
+  Title: Broken street light
+  District: "South24Parganas"
+  City (if any): "undefined"
+  Ward: "WARD_10"
+- Complaint ZI376iY0zHqTW50hWo5z:
+  Title: Contamined water supply
+  District: "South24Parganas"
+  City (if any): "undefined"
+  Ward: "WARD_12"
+- Complaint SPKAkVc7nfLvNiKzut9V:
+  Title: Contamined water supply
+  District: "South24Parganas"
+  City (if any): "undefined"
+  Ward: "WARD_12"
+- Complaint dRnMX0R6AJyAtElHnJgG:
+  Title: Debug Complaint
+  District: "West"
+  City (if any): "undefined"
+  Ward: "WARD_1"
+- Complaint bGMnSTzlcUNPtF7sq9yh:
+  Title: Test Escalation Complaint
+  District: "undefined"
+  City (if any): "undefined"
+  Ward: "WARD_10"

@@ -8,7 +8,7 @@ export const DashboardPage: React.FC = () => {
 
     if (!userProfile) return <div>Loading...</div>;
 
-    if (userProfile.role === 'official' || userProfile.role === 'superadmin') {
+    if (userProfile.role === 'admin') {
         return <AdminDashboard />;
     }
 

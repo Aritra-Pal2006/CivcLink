@@ -7,8 +7,12 @@ import './index.css'
 import 'leaflet/dist/leaflet.css'
 import './i18n';
 
+import { LanguageProvider } from './contexts/LanguageContext';
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <LanguageProvider>
+      <App />
+    </LanguageProvider>
   </StrictMode>,
 )

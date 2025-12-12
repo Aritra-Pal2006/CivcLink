@@ -28,6 +28,21 @@ export const Topbar: React.FC<{ onMenuClick: () => void }> = ({ onMenuClick }) =
                             <Bell className="h-6 w-6" aria-hidden="true" />
                         </button>
 
+                        {/* Language Toggle */}
+                        <div className="ml-3">
+                            <button
+                                onClick={() => {
+                                    const current = localStorage.getItem('app_lang') || 'en';
+                                    const next = current === 'en' ? 'hi' : 'en';
+                                    localStorage.setItem('app_lang', next);
+                                    window.location.reload(); // Simple reload to apply (mock)
+                                }}
+                                className="px-3 py-1 rounded-full bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-colors border border-white/20"
+                            >
+                                {localStorage.getItem('app_lang') === 'hi' ? '🇮🇳 HI' : '🇺🇸 EN'}
+                            </button>
+                        </div>
+
                         {/* Profile dropdown */}
                         <div className="ml-3 relative flex items-center gap-4">
                             <div className="text-sm text-right hidden sm:block">

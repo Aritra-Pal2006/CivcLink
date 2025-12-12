@@ -17,11 +17,11 @@ router.use(fileUpload());
 
 router.post('/', async (req, res) => {
     try {
-        if (!req.files || !req.files.file) {
+        if (!req.files || !(req.files as any).file) {
             return res.status(400).json({ error: 'No file uploaded' });
         }
 
-        const file = req.files.file as fileUpload.UploadedFile;
+        const file = (req.files as any).file as fileUpload.UploadedFile;
         const fileExt = file.name.split('.').pop();
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
         const filePath = `uploads/${fileName}`;

@@ -8,7 +8,7 @@ export interface AIResult {
 
 export interface AIImageComparisonResult {
     similarityScore: number;
-    verdict: 'LIKELY_MATCH' | 'UNCERTAIN' | 'LIKELY_FAKE';
+    verdict: 'LIKELY_MATCH' | 'UNCERTAIN' | 'LIKELY_FAKE' | 'VERIFIED' | 'REJECTED';
     reason: string;
 }
 

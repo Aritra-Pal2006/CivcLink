@@ -1,0 +1,77 @@
+{
+    "appTitle": "सिविकलिंक",
+    "dashboard": {
+        "title": "डैशबोर्ड",
+        "overview": "अवलोकन"
+    },
+    "kpi": {
+        "total": "कुल शिकायतें",
+        "open": "लंबित मुद्दे",
+        "overdue": "अतिदेय",
+        "resolved": "हल किया गया"
+    },
+    "actions": {
+        "assign": "सौंपें",
+        "resolve": "हल करें",
+        "reject": "अस्वीकार करें",
+        "view": "विवरण देखें"
+    },
+    "filter": {
+        "ward": "वार्ड द्वारा फ़िल्टर करें",
+        "status": "स्थिति द्वारा फ़िल्टर करें",
+        "priority": "प्राथमिकता द्वारा फ़िल्टर करें"
+    },
+    "ticket": {
+        "createdMessage": "शिकायत सफलतापूर्वक बनाई गई",
+        "id": "शिकायत आईडी",
+        "status": "स्थिति",
+        "priority": "प्राथमिकता"
+    },
+    "whatsapp": {
+        "ticket_created": "नमस्ते! {{category}} के संबंध में आपकी शिकायत {{id}} दर्ज कर ली गई है। हम आपको जल्द ही अपडेट करेंगे।",
+        "status_update": "अपडेट: आपकी शिकायत {{id}} अब {{status}} है।"
+    },
+    "notification": {
+        "escalated": "देरी के कारण शिकायत {{id}} को आगे बढ़ा दिया गया है।"
+    },
+    "ai": {
+        "confidence": {
+            "high": "उच्च विश्वास",
+            "low": "कम विश्वास"
+        },
+        "verdict": "एआई निर्णय"
+    },
+    "map": {
+        "heatToggle": "हीटमैप टॉगल करें",
+        "satellite": "उपग्रह दृश्य"
+    },
+    "livefeed": {
+        "newComplaint": "नई शिकायत प्राप्त हुई",
+        "title": "लाइव फीड"
+    },
+    "common": {
+        "loading": "लोड हो रहा है...",
+        "error": "त्रुटि",
+        "save": "सहेजें",
+        "cancel": "रद्द करें",
+        "logout": "लॉग आउट",
+        "language": "भाषा"
+    },
+    "category": {
+        "Roads": "सड़कें",
+        "Water": "पानी",
+        "Waste": "कचरा",
+        "Electricity": "बिजली",
+        "Other": "अन्य"
+    },
+    "categoryLabel": "श्रेणी",
+    "community_feed": "सामुदायिक फ़ीड",
+    "newComplaint": "नई शिकायत",
+    "myComplaints": "मेरी शिकायतें",
+    "settings": "सेटिंग्स",
+    "admin": {
+        "allComplaints": "सभी शिकायतें",
+        "analytics": "एनालिटिक्स",
+        "escalations": "एस्केलेशन"
+    }
+}

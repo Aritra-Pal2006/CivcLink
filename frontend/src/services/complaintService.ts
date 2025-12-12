@@ -12,7 +12,7 @@ import {
     Timestamp,
     onSnapshot
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
 
 export interface Complaint {
     id?: string;
@@ -28,8 +28,9 @@ export interface Complaint {
         stateCode?: string;
         districtName?: string;
         districtCode?: string;
+        wardCode?: string;
     };
-    status: 'submitted' | 'in_review' | 'in_progress' | 'resolved' | 'rejected' | 'pending_verification' | 'reopened' | 'flagged';
+    status: 'submitted' | 'in_review' | 'in_progress' | 'resolved' | 'rejected' | 'reopened' | 'flagged';
     priority: 'low' | 'medium' | 'high';
     createdAt: Timestamp;
     updatedAt: Timestamp;
@@ -39,6 +40,8 @@ export interface Complaint {
         webViewLink: string;
         thumbnailLink: string;
         name: string;
+        type?: 'image' | 'audio' | 'video';
+        url?: string;
     }[];
     assignedTo?: string; // UID of the official
     department?: string;
@@ -52,10 +55,25 @@ export interface Complaint {
         name: string;
         description?: string;
         uploadedAt?: Timestamp;
+        proofLocationMismatch?: boolean;
+        proofLocationDistance?: number;
     };
     verificationDeadline?: Timestamp;
     timesReopened?: number;
     isEscalated?: boolean;
+    escalationTriggered?: boolean;
+    isOverdue?: boolean;
+    isAnonymous?: boolean;
+    anonymousDisplayId?: string;
+    duplicateOf?: string | null;
+    supportCount?: number;
+    // Transcription Fields
+    transcript?: string | null;
+    transcriptionStatus?: 'not_requested' | 'pending' | 'completed' | 'failed';
+    recordingUrl?: string;
+    transcriptionRequestedAt?: Timestamp;
+    transcriptionCompletedAt?: Timestamp;
+
     verification?: {
         aiScore: number;
         aiVerdict: 'LIKELY_MATCH' | 'UNCERTAIN' | 'LIKELY_FAKE';
@@ -63,6 +81,7 @@ export interface Complaint {
         needsCommunityVote: boolean;
     };
     source?: 'web' | 'whatsapp';
+    rejectionReason?: string;
 }
 
 export interface ComplaintNote {
@@ -130,6 +149,16 @@ export const getAllComplaints = async () => {
     }
 };
 
+export const subscribeToAllComplaints = (callback: (complaints: Complaint[]) => void) => {
+    const q = query(collection(db, 'complaints'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+        const complaints = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Complaint));
+        callback(complaints);
+    }, (error) => {
+        console.error("Error subscribing to complaints:", error);
+    });
+};
+
 export const getComplaintById = async (id: string) => {
     try {
         const docRef = doc(db, 'complaints', id);
@@ -162,7 +191,7 @@ export const updateComplaint = async (id: string, data: Partial<Complaint>) => {
         const response = await fetch(`${API_BASE_URL}/complaints/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+            body: JSON.stringify({ ...data, actorId: auth.currentUser?.uid })
         });
         if (!response.ok) throw new Error('Failed to update complaint');
     } catch (error) {
@@ -250,7 +279,7 @@ export const upvoteComplaint = async (complaintId: string, userId: string) => {
         throw error;
     }
 };
-export const getAdminComplaints = async (filters: { status?: string; priority?: string; limit?: number; startAfter?: string; state?: string; district?: string }) => {
+export const getAdminComplaints = async (filters: { status?: string; priority?: string; limit?: number; startAfter?: string; state?: string; district?: string; ward?: string }) => {
     try {
         const params = new URLSearchParams();
         if (filters.status) params.append('status', filters.status);
@@ -258,9 +287,14 @@ export const getAdminComplaints = async (filters: { status?: string; priority?: 
         if (filters.limit) params.append('limit', filters.limit.toString());
         if (filters.state) params.append('state', filters.state);
         if (filters.district) params.append('district', filters.district);
+        if (filters.ward) params.append('ward', filters.ward);
         // startAfter not fully implemented in backend for cursor yet, but we can pass it
 
-        const response = await fetch(`${API_BASE_URL}/complaints?${params.toString()}`);
+        const response = await fetch(`${API_BASE_URL}/complaints?${params.toString()}`, {
+            headers: {
+                'x-user-id': auth.currentUser?.uid || ''
+            }
+        });
         if (!response.ok) throw new Error('Failed to fetch admin complaints');
 
         const complaints = await response.json();
@@ -274,6 +308,21 @@ export const getAdminComplaints = async (filters: { status?: string; priority?: 
         }));
     } catch (error) {
         console.error("Error fetching admin complaints:", error);
+        throw error;
+    }
+};
+
+export const getAdminStats = async () => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/complaints/admin/stats`, {
+            headers: {
+                'x-user-id': auth.currentUser?.uid || ''
+            }
+        });
+        if (!response.ok) throw new Error('Failed to fetch admin stats');
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching admin stats:", error);
         throw error;
     }
 };
@@ -293,16 +342,16 @@ export const getComplaintTimeline = async (id: string) => {
     }
 };
 
-export const verifyComplaintResolution = async (id: string, actorId: string) => {
+export const resolveComplaint = async (id: string, proofData: any, adminLocation?: { lat: number; lng: number } | null) => {
     try {
-        const response = await fetch(`${API_BASE_URL}/complaints/${id}/verify`, {
+        const response = await fetch(`${API_BASE_URL}/complaints/${id}/resolve`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actorId })
+            body: JSON.stringify({ proof: proofData, actorId: auth.currentUser?.uid, adminLocation })
         });
-        if (!response.ok) throw new Error('Failed to verify complaint');
+        if (!response.ok) throw new Error('Failed to resolve complaint');
     } catch (error) {
-        console.error("Error verifying complaint:", error);
+        console.error("Error resolving complaint:", error);
         throw error;
     }
 };
@@ -321,6 +370,20 @@ export const reopenComplaint = async (id: string, actorId: string, reason: strin
     }
 };
 
+export const rejectComplaint = async (id: string, actorId: string, reason: string) => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/complaints/${id}/reject`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actorId, reason })
+        });
+        if (!response.ok) throw new Error('Failed to reject complaint');
+    } catch (error) {
+        console.error("Error rejecting complaint:", error);
+        throw error;
+    }
+};
+
 export const getPublicStats = async () => {
     try {
         const response = await fetch(`${API_BASE_URL}/complaints/public/stats`);
@@ -332,59 +395,77 @@ export const getPublicStats = async () => {
     }
 };
 
-export const voteDispute = async (id: string, actorId: string) => {
+export const getEscalatedComplaints = async (): Promise<Complaint[]> => {
     try {
-        const response = await fetch(`${API_BASE_URL}/complaints/${id}/vote-dispute`, {
+        const response = await fetch(`${API_BASE_URL}/complaints/escalated`, {
+            headers: {
+                'x-user-id': auth.currentUser?.uid || ''
+            }
+        });
+        if (!response.ok) throw new Error('Failed to fetch escalated complaints');
+        const data = await response.json();
+        return data.map((c: any) => ({
+            ...c,
+            createdAt: c.createdAt ? new Timestamp(c.createdAt._seconds, c.createdAt._nanoseconds) : null,
+            updatedAt: c.updatedAt ? new Timestamp(c.updatedAt._seconds, c.updatedAt._nanoseconds) : null,
+        }));
+    } catch (error) {
+        console.error("Error fetching escalated complaints:", error);
+        throw error;
+    }
+};
+
+export const getPublicFeed = async () => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/complaints/public/feed`);
+        if (!response.ok) throw new Error('Failed to fetch public feed');
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching public feed:", error);
+        throw error;
+    }
+};
+
+export const transcribeComplaint = async (id: string) => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/complaints/${id}/transcribe`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actorId })
+            headers: {
+                'Content-Type': 'application/json',
+                'x-user-id': auth.currentUser?.uid || ''
+            }
         });
-        if (!response.ok) throw new Error('Failed to vote dispute');
+        if (!response.ok) throw new Error('Failed to transcribe complaint');
+        return await response.json();
     } catch (error) {
-        console.error("Error voting dispute:", error);
+        console.error("Error transcribing complaint:", error);
         throw error;
     }
 };
 
-export const uploadCitizenProof = async (id: string, actorId: string, file: File) => {
+export const transcribeAudio = async (audioBlob: Blob) => {
     try {
-        // Reuse upload logic or just mock URL for now if uploadComplaintAttachment handles it.
-        // We need to upload file first, then send URL.
-        const { uploadComplaintAttachment } = await import('./complaintService'); // Self-import to reuse? Or just call it.
-        // Actually, uploadComplaintAttachment is exported in this file.
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'recording.webm');
 
-        // Circular dependency issue if I import from same file? No, just call it directly if in same module scope?
-        // But it's exported. I can just call it.
+        const token = await auth.currentUser?.getIdToken();
 
-        const attachment = await uploadComplaintAttachment(file);
-
-        const response = await fetch(`${API_BASE_URL}/complaints/${id}/citizen-proof`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                actorId,
-                citizen_proof_url: attachment.webViewLink
-            })
-        });
-
-        if (!response.ok) throw new Error('Failed to upload citizen proof');
-        return attachment;
-    } catch (error) {
-        console.error("Error uploading citizen proof:", error);
-        throw error;
-    }
-};
-
-export const voteResolution = async (id: string, actorId: string, vote: 'looks_fixed' | 'not_fixed') => {
-    try {
-        const response = await fetch(`${API_BASE_URL}/complaints/${id}/vote-resolution`, {
+        const response = await fetch(`${API_BASE_URL}/complaints/transcribe-audio`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actorId, vote })
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
         });
-        if (!response.ok) throw new Error('Failed to vote on resolution');
+
+        if (!response.ok) {
+            throw new Error('Transcription failed');
+        }
+
+        return await response.json();
     } catch (error) {
-        console.error("Error voting on resolution:", error);
+        console.error("Error transcribing audio:", error);
         throw error;
     }
 };
+

@@ -38,7 +38,9 @@ export const LoginPage: React.FC = () => {
 
                 // Role Validation based on Login Type
                 if (loginType === 'official') {
-                    if (userData.role !== 'official' && userData.role !== 'superadmin') {
+                    // Allow 'admin' (generic), 'official', 'superadmin', and specific admin types
+                    const allowedRoles = ['admin', 'official', 'superadmin', 'ward_admin', 'city_admin', 'dept_admin'];
+                    if (!allowedRoles.includes(userData.role)) {
                         throw new Error("Access Denied: You are not an authorized official.");
                     }
                     navigate('/admin/analytics');

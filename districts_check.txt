@@ -1,0 +1,22 @@
+Checking Admin Areas:
+Delhi:
+  District: "West"
+  State: "NCTofDelhi"
+Mumbai:
+  District: "MumbaiSuburban"
+  State: "Maharashtra"
+Kolkata:
+  District: "Kolkata"
+  State: "WestBengal"
+Bangalore:
+  District: "Bangalore"
+  State: "Karnataka"
+Chennai:
+  District: "Chennai"
+  State: "TamilNadu"
+Hyderabad:
+  District: "Hyderabad"
+  State: "Telangana"
+Pune:
+  District: "Pune"
+  State: "Maharashtra"

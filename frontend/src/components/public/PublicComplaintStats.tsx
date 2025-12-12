@@ -39,7 +39,7 @@ export const PublicComplaintStats: React.FC<PublicComplaintStatsProps> = ({ stat
                                 paddingAngle={5}
                                 dataKey="count"
                             >
-                                {categoryData.map((entry, index) => (
+                                {categoryData.map((_, index) => (
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                 ))}
                             </Pie>

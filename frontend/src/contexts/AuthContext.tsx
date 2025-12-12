@@ -1,15 +1,17 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { type User, onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
 
-export type UserRole = "citizen" | "official" | "superadmin";
+export type UserRole = "citizen" | "admin";
 
 export interface UserProfile {
     uid: string;
     email: string | null;
     displayName: string | null;
     role: UserRole;
+    adminLevel?: 'ward' | 'city';
+    assignedWard?: string;
     city?: string;
     area?: string;
     preferredLanguage?: string;
@@ -39,32 +41,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        let profileUnsubscribe: (() => void) | null = null;
+
+        const authUnsubscribe = onAuthStateChanged(auth, (user) => {
             setCurrentUser(user);
+
+            // Clean up previous profile listener
+            if (profileUnsubscribe) {
+                profileUnsubscribe();
+                profileUnsubscribe = null;
+            }
+
             if (user) {
-                try {
-                    const userDoc = await getDoc(doc(db, "users", user.uid));
-                    if (userDoc.exists()) {
-                        setUserProfile(userDoc.data() as UserProfile);
+                // Subscribe to user profile changes
+                profileUnsubscribe = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        let role = data.role || "citizen";
+
+                        // Normalize admin roles
+                        if (["ward_admin", "dept_admin", "city_admin", "superadmin", "official"].includes(role)) {
+                            role = "admin";
+                        }
+
+                        setUserProfile({
+                            ...data,
+                            role: role as UserRole,
+                            adminLevel: data.adminLevel,
+                            assignedWard: data.assignedWard
+                        } as UserProfile);
                     } else {
-                        // Fallback if user doc doesn't exist yet (e.g. just registered but doc creation pending)
+                        // Fallback if user doc doesn't exist yet (e.g. during signup before firestore write)
                         setUserProfile({
                             uid: user.uid,
                             email: user.email,
                             displayName: user.displayName,
-                            role: "citizen" // Default role
+                            role: "citizen"
                         });
                     }
-                } catch (error) {
+                    setLoading(false);
+                }, (error: any) => {
                     console.error("Error fetching user profile:", error);
-                }
+                    setLoading(false);
+                });
             } else {
                 setUserProfile(null);
+                setLoading(false);
             }
-            setLoading(false);
         });
 
-        return unsubscribe;
+        return () => {
+            authUnsubscribe();
+            if (profileUnsubscribe) profileUnsubscribe();
+        };
     }, []);
 
     const logout = async () => {
