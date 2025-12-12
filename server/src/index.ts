@@ -86,9 +86,18 @@ if (process.env.NODE_ENV !== 'production') {
     runEscalationJob();
 }
 
-// Health Check
-app.get('/', (req, res) => {
-    res.send('CivicLink Local Server is Running');
+// Serve static files from the React frontend app
+const frontendPath = path.join(__dirname, '../../frontend/dist');
+app.use(express.static(frontendPath));
+
+// Health Check (API only)
+app.get('/api/health', (req, res) => {
+    res.send('CivicLink API is Running');
+});
+
+// Anything that doesn't match the above, send back index.html
+app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
 const PORT = process.env.SERVER_PORT || 5000;
