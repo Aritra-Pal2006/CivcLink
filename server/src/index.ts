@@ -17,28 +17,36 @@ app.use(express.urlencoded({ extended: true })); // Required for Twilio Webhooks
 const serviceAccountPath = process.env.FIREBASE_ADMIN_SDK_PATH;
 const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
 
-if (serviceAccountJson) {
-    try {
-        const serviceAccount = JSON.parse(serviceAccountJson);
-        admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount)
-        });
-        console.log("✅ Firebase Admin initialized from ENV");
-    } catch (error) {
-        console.error("❌ Failed to parse FIREBASE_SERVICE_ACCOUNT:", error);
+if (admin.apps.length === 0) {
+    if (serviceAccountJson) {
+        try {
+            const serviceAccount = JSON.parse(serviceAccountJson);
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount)
+            });
+            console.log("✅ Firebase Admin initialized from ENV");
+        } catch (error) {
+            console.error("❌ Failed to parse FIREBASE_SERVICE_ACCOUNT:", error);
+        }
+    } else if (serviceAccountPath) {
+        try {
+            const serviceAccount = require(path.resolve(__dirname, '..', serviceAccountPath));
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount)
+            });
+            console.log("✅ Firebase Admin initialized from FILE");
+        } catch (error) {
+            console.error("❌ Failed to load Firebase Admin SDK key:", error);
+        }
+    } else {
+        console.warn("⚠️ FIREBASE_ADMIN_SDK_PATH or FIREBASE_SERVICE_ACCOUNT not set. Attempting default initialization...");
+        try {
+            admin.initializeApp();
+            console.log("✅ Firebase Admin initialized with default credentials");
+        } catch (error) {
+            console.error("❌ Failed to initialize Firebase Admin (Default):", error);
+        }
     }
-} else if (serviceAccountPath) {
-    try {
-        const serviceAccount = require(path.resolve(__dirname, '..', serviceAccountPath));
-        admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount)
-        });
-        console.log("✅ Firebase Admin initialized from FILE");
-    } catch (error) {
-        console.error("❌ Failed to load Firebase Admin SDK key:", error);
-    }
-} else {
-    console.warn("⚠️ FIREBASE_ADMIN_SDK_PATH or FIREBASE_SERVICE_ACCOUNT not set. Auth verification will fail.");
 }
 
 // Import Routes
